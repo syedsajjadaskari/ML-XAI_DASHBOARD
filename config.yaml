@@ -1,0 +1,258 @@
+# Modern PyCaret-Streamlit Application Configuration
+
+app:
+  title: "Modern ML Web Application"
+  description: "End-to-end machine learning web application built with PyCaret and Streamlit"
+  version: "2.0.0"
+  page_icon: "🤖"
+  layout: "wide"
+  
+  # File upload settings
+  max_file_size: 200  # MB
+  supported_formats: 
+    - "csv"
+    - "xlsx" 
+    - "xls"
+    - "parquet"
+  
+  # Session settings
+  session_timeout: 3600  # seconds
+  max_concurrent_users: 100
+
+data:
+  # Data validation settings
+  min_rows: 10
+  min_columns: 2
+  max_missing_percentage: 90
+  
+  # Preprocessing defaults
+  default_missing_strategy: "mean"
+  default_encoding: "onehot"
+  default_scaling: "standard"
+  
+  # Feature engineering
+  max_categorical_cardinality: 50
+  auto_feature_selection: true
+  outlier_detection_threshold: 0.05
+
+models:
+  # Model management
+  auto_save: true
+  save_path: "models/"
+  model_name_format: "model_{timestamp}"
+  
+  # Training settings
+  default_cv_folds: 5
+  default_test_size: 0.2
+  default_random_state: 42
+  
+  # Performance thresholds
+  min_accuracy_classification: 0.6
+  min_r2_regression: 0.5
+  
+  # Available models
+  classification_models:
+    - "lr"      # Logistic Regression
+    - "rf"      # Random Forest
+    - "et"      # Extra Trees
+    - "xgboost" # XGBoost
+    - "lightgbm" # LightGBM
+    - "catboost" # CatBoost
+    - "nb"      # Naive Bayes
+    - "dt"      # Decision Tree
+    - "svm"     # Support Vector Machine
+    - "knn"     # K-Nearest Neighbors
+    - "ada"     # AdaBoost
+    - "gbr"     # Gradient Boosting
+    - "mlp"     # Multi-layer Perceptron
+    - "ridge"   # Ridge Classifier
+    - "qda"     # Quadratic Discriminant Analysis
+  
+  regression_models:
+    - "lr"      # Linear Regression
+    - "rf"      # Random Forest
+    - "et"      # Extra Trees
+    - "xgboost" # XGBoost
+    - "lightgbm" # LightGBM
+    - "catboost" # CatBoost
+    - "dt"      # Decision Tree
+    - "svm"     # Support Vector Machine
+    - "knn"     # K-Nearest Neighbors
+    - "ada"     # AdaBoost
+    - "gbr"     # Gradient Boosting
+    - "mlp"     # Multi-layer Perceptron
+    - "ridge"   # Ridge Regression
+    - "lasso"   # Lasso Regression
+    - "en"      # Elastic Net
+    - "huber"   # Huber Regressor
+
+visualization:
+  # Plotting settings
+  theme: "plotly_white"
+  color_palette: 
+    - "#1f77b4"
+    - "#ff7f0e" 
+    - "#2ca02c"
+    - "#d62728"
+    - "#9467bd"
+    - "#8c564b"
+    - "#e377c2"
+    - "#7f7f7f"
+    - "#bcbd22"
+    - "#17becf"
+  
+  # Default plots
+  default_classification_plots:
+    - "confusion_matrix"
+    - "auc"
+    - "threshold"
+    - "pr"
+    - "class_report"
+    - "roc"
+    - "calibration"
+  
+  default_regression_plots:
+    - "residuals"
+    - "cooks"
+    - "rfe"
+    - "learning"
+    - "validation"
+    - "feature"
+  
+  # Plot settings
+  default_height: 600
+  default_width: 800
+  max_categories_display: 20
+  max_features_display: 20
+
+logging:
+  # Logging configuration
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "app.log"
+  max_file_size: 10  # MB
+  backup_count: 5
+
+security:
+  # Security settings
+  enable_rate_limiting: true
+  max_requests_per_minute: 60
+  enable_input_validation: true
+  sanitize_file_names: true
+  
+  # Content security
+  allowed_file_extensions: 
+    - ".csv"
+    - ".xlsx"
+    - ".xls" 
+    - ".parquet"
+  
+  max_upload_attempts: 3
+  session_encryption: true
+
+performance:
+  # Performance optimization
+  enable_caching: true
+  cache_ttl: 3600  # seconds
+  max_cache_size: 1000  # MB
+  
+  # Computation settings
+  use_multiprocessing: true
+  max_workers: 4
+  chunk_size: 1000
+  
+  # Memory management
+  max_memory_usage: 4000  # MB
+  garbage_collection_threshold: 0.8
+
+api:
+  # Future API settings
+  enable_api: false
+  api_version: "v1"
+  api_prefix: "/api"
+  
+  # Authentication
+  require_api_key: true
+  rate_limit_per_key: 1000
+  
+  # Endpoints
+  enable_training_endpoint: true
+  enable_prediction_endpoint: true
+  enable_model_management: true
+
+deployment:
+  # Deployment settings
+  environment: "development"  # development, staging, production
+  
+  # Docker settings
+  docker_image: "pycaret-streamlit"
+  docker_tag: "latest"
+  port: 8501
+  
+  # Cloud deployment
+  cloud_provider: null  # aws, gcp, azure
+  auto_scaling: false
+  min_instances: 1
+  max_instances: 5
+
+monitoring:
+  # Application monitoring
+  enable_health_checks: true
+  health_check_interval: 300  # seconds
+  
+  # Metrics collection
+  collect_usage_metrics: true
+  collect_performance_metrics: true
+  
+  # Alerting
+  enable_alerts: false
+  alert_email: null
+  
+  # Model monitoring
+  track_model_performance: true
+  data_drift_detection: false
+  model_drift_threshold: 0.1
+
+database:
+  # Database settings (for future use)
+  enable_database: false
+  database_type: "sqlite"  # sqlite, postgresql, mysql
+  connection_string: null
+  
+  # Tables
+  store_experiments: false
+  store_predictions: false
+  store_user_sessions: false
+
+features:
+  # Feature flags
+  enable_auto_ml: true
+  enable_hyperparameter_tuning: true
+  enable_ensemble_models: true
+  enable_model_interpretation: true
+  enable_shap_analysis: true
+  enable_data_profiling: true
+  enable_batch_predictions: true
+  enable_model_comparison: true
+  enable_custom_models: false
+  enable_model_deployment: false
+  enable_experiment_tracking: false
+
+ui:
+  # User interface settings
+  show_sidebar_info: true
+  show_progress_indicators: true
+  enable_dark_mode_toggle: false
+  
+  # Navigation
+  enable_step_navigation: true
+  show_breadcrumbs: true
+  
+  # Data display
+  max_rows_display: 1000
+  max_columns_display: 50
+  enable_data_filtering: true
+  
+  # Responsiveness
+  mobile_optimized: true
+  tablet_optimized: true
