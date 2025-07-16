@@ -1,0 +1,30 @@
+# Core ML and Data Science Libraries
+pycaret
+streamlit
+pandas
+numpy
+scikit-learn
+
+# Visualization Libraries
+plotly
+matplotlib
+seaborn
+
+# Additional ML Libraries
+xgboost
+lightgbm
+catboost
+imbalanced-learn
+
+# Data Processing
+openpyxl
+xlrd
+
+# Utilities
+joblib
+scipy
+tqdm
+
+# Optional: For advanced features
+shap
+optuna
