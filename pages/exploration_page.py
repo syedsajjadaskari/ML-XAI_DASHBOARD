@@ -1,6 +1,6 @@
 """
-Advanced Interactive Preprocessing Page
-Handles data preprocessing with real-time preview
+Data Exploration Page
+Handles data exploration and visualization
 """
 
 import streamlit as st
@@ -8,504 +8,403 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime
+from plotly.subplots import make_subplots
 import logging
 
 logger = logging.getLogger(__name__)
 
-def page_preprocessing(data_handler):
-    """Advanced interactive preprocessing configuration page."""
+def page_data_exploration(visualizer):
+    """Data exploration page."""
     if st.session_state.data is None:
         st.warning("⚠️ Please upload data first")
         return
     
-    st.header("⚙️ Advanced Data Preprocessing")
-    st.markdown("Configure preprocessing options and see real-time transformations")
+    st.header("🔍 Data Exploration")
+    st.markdown("*Explore your dataset with interactive visualizations*")
     
-    # Initialize preview data
-    if 'preview_data' not in st.session_state:
-        st.session_state.preview_data = st.session_state.data.copy()
+    data = st.session_state.data
     
-    # Create tabs for different preprocessing categories
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "🗑️ Column Management", 
-        "❓ Missing Values", 
-        "🏷️ Categorical Encoding", 
-        "📊 Feature Engineering",
-        "🔍 Final Preview"
-    ])
+    # Dataset overview
+    st.subheader("📊 Dataset Overview")
     
-    with tab1:
-        _handle_column_management()
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Rows", f"{len(data):,}")
+    with col2:
+        st.metric("Total Columns", f"{len(data.columns):,}")
+    with col3:
+        missing_pct = (data.isnull().sum().sum() / (len(data) * len(data.columns))) * 100
+        st.metric("Missing Data", f"{missing_pct:.1f}%")
+    with col4:
+        memory_mb = data.memory_usage(deep=True).sum() / 1024 / 1024
+        st.metric("Memory Usage", f"{memory_mb:.1f} MB")
     
-    with tab2:
-        _handle_missing_values()
-    
-    with tab3:
-        _handle_categorical_encoding()
-    
-    with tab4:
-        _handle_feature_engineering()
-    
-    with tab5:
-        _handle_final_preview(data_handler)
-
-def _handle_column_management():
-    """Handle column removal and management."""
-    st.subheader("🗑️ Column Management")
-    
-    col1, col2 = st.columns([2, 1])
+    # Data types breakdown
+    st.subheader("📋 Data Types")
+    col1, col2 = st.columns([1, 2])
     
     with col1:
-        st.write("**Remove Unnecessary Columns**")
-        available_columns = [col for col in st.session_state.data.columns 
-                           if col != st.session_state.target_column]
-        
-        # Quick selection buttons
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            if st.button("🆔 Remove ID-like columns", help="Remove columns that look like IDs"):
-                id_columns = [col for col in available_columns 
-                             if any(keyword in col.lower() for keyword in ['id', 'index', 'key', 'uid'])]
-                st.session_state.columns_to_remove = list(set(st.session_state.get('columns_to_remove', []) + id_columns))
-        
-        with col_b:
-            if st.button("📛 Remove high-missing columns", help="Remove columns with >70% missing values"):
-                high_missing = []
-                for col in available_columns:
-                    missing_pct = st.session_state.data[col].isnull().sum() / len(st.session_state.data)
-                    if missing_pct > 0.7:
-                        high_missing.append(col)
-                st.session_state.columns_to_remove = list(set(st.session_state.get('columns_to_remove', []) + high_missing))
-        
-        with col_c:
-            if st.button("🔄 Reset selection"):
-                st.session_state.columns_to_remove = []
-        
-        # Manual column selection
-        columns_to_remove = st.multiselect(
-            "Select columns to remove:",
-            options=available_columns,
-            default=st.session_state.get('columns_to_remove', []),
-            help="Choose columns that are not useful for prediction"
+        dtype_counts = data.dtypes.value_counts()
+        fig_dtype = px.pie(
+            values=dtype_counts.values,
+            names=dtype_counts.index.astype(str),
+            title="Data Types Distribution"
         )
-        st.session_state.columns_to_remove = columns_to_remove
+        st.plotly_chart(fig_dtype, use_container_width=True)
     
     with col2:
-        st.write("**Column Statistics**")
-        col_stats = []
-        for col in st.session_state.data.columns:
-            if col != st.session_state.target_column:
-                missing_pct = st.session_state.data[col].isnull().sum() / len(st.session_state.data) * 100
-                unique_count = st.session_state.data[col].nunique()
-                data_type = str(st.session_state.data[col].dtype)
-                
-                status = "✅ Keep"
-                if col in columns_to_remove:
-                    status = "❌ Remove"
-                elif missing_pct > 70:
-                    status = "⚠️ High Missing"
-                elif unique_count == 1:
-                    status = "⚠️ Constant"
-                
-                col_stats.append({
-                    'Column': col,
-                    'Type': data_type,
-                    'Missing %': f"{missing_pct:.1f}%",
-                    'Unique': unique_count,
-                    'Status': status
-                })
+        # Column information table
+        col_info = []
+        for col in data.columns:
+            col_info.append({
+                'Column': col,
+                'Type': str(data[col].dtype),
+                'Non-Null': data[col].count(),
+                'Null': data[col].isnull().sum(),
+                'Unique': data[col].nunique(),
+                'Memory (KB)': data[col].memory_usage(deep=True) / 1024
+            })
         
-        stats_df = pd.DataFrame(col_stats)
-        st.dataframe(stats_df, use_container_width=True, height=300)
+        col_df = pd.DataFrame(col_info)
+        st.dataframe(col_df, use_container_width=True, height=300)
     
-    # Update preview data
-    if columns_to_remove:
-        st.session_state.preview_data = st.session_state.data.drop(columns=columns_to_remove, errors='ignore')
-        st.success(f"✅ Preview updated: Removed {len(columns_to_remove)} columns")
-    else:
-        st.session_state.preview_data = st.session_state.data.copy()
-
-def _handle_missing_values():
-    """Handle missing values processing."""
-    st.subheader("❓ Missing Values Handling")
-    
-    missing_analysis = st.session_state.preview_data.isnull().sum()
-    missing_analysis = missing_analysis[missing_analysis > 0].sort_values(ascending=False)
-    
-    if len(missing_analysis) > 0:
-        col1, col2 = st.columns([1, 1])
+    # Target variable analysis
+    if st.session_state.target_column:
+        st.subheader(f"🎯 Target Variable Analysis: {st.session_state.target_column}")
+        
+        target_col = st.session_state.target_column
+        problem_type = st.session_state.problem_type
+        
+        col1, col2 = st.columns(2)
         
         with col1:
-            st.write("**Missing Values Analysis**")
-            
-            # Missing values by column
-            missing_df = pd.DataFrame({
-                'Column': missing_analysis.index,
-                'Missing Count': missing_analysis.values,
-                'Missing %': (missing_analysis.values / len(st.session_state.preview_data) * 100)
-            })
-            
-            fig_missing = px.bar(
-                missing_df, 
-                x='Column', 
-                y='Missing %',
-                title='Missing Values by Column',
-                color='Missing %',
-                color_continuous_scale='Reds'
-            )
-            fig_missing.update_xaxes(tickangle=45)
-            st.plotly_chart(fig_missing, use_container_width=True)
-            
-            st.dataframe(missing_df, use_container_width=True)
+            if problem_type == 'classification':
+                # Target distribution for classification
+                target_counts = data[target_col].value_counts()
+                fig_target = px.bar(
+                    x=target_counts.index,
+                    y=target_counts.values,
+                    title=f"Target Distribution: {target_col}",
+                    labels={'x': target_col, 'y': 'Count'}
+                )
+                fig_target.update_traces(text=target_counts.values, textposition='auto')
+                st.plotly_chart(fig_target, use_container_width=True)
+            else:
+                # Target distribution for regression
+                fig_target = px.histogram(
+                    data, 
+                    x=target_col, 
+                    nbins=30,
+                    title=f"Target Distribution: {target_col}"
+                )
+                st.plotly_chart(fig_target, use_container_width=True)
         
         with col2:
-            st.write("**Missing Value Strategy**")
-            
-            global_strategy = st.selectbox(
-                "Global missing value strategy:",
-                ["Custom per column", "drop", "mean", "median", "mode", "constant"],
-                help="Apply same strategy to all columns or customize per column"
-            )
-            
-            column_strategies = {}
-            
-            if global_strategy == "Custom per column":
-                st.write("**Custom Strategy per Column:**")
-                for col in missing_analysis.index:
-                    col_type = str(st.session_state.preview_data[col].dtype)
-                    
-                    if 'int' in col_type or 'float' in col_type:
-                        options = ["mean", "median", "constant", "drop"]
-                        default_idx = 0
-                    else:
-                        options = ["mode", "constant", "drop"]
-                        default_idx = 0
-                    
-                    strategy = st.selectbox(
-                        f"{col} ({missing_analysis[col]} missing):",
-                        options,
-                        index=default_idx,
-                        key=f"strategy_{col}"
-                    )
-                    column_strategies[col] = strategy
-                    
-                    if strategy == "constant":
-                        const_value = st.text_input(
-                            f"Constant value for {col}:",
-                            value="0" if 'int' in col_type or 'float' in col_type else "Unknown",
-                            key=f"const_{col}"
-                        )
-                        column_strategies[f"{col}_constant"] = const_value
+            # Target statistics
+            st.write("**Target Statistics:**")
+            if problem_type == 'classification':
+                stats = {
+                    'Unique Classes': data[target_col].nunique(),
+                    'Most Frequent': data[target_col].mode().iloc[0] if len(data[target_col].mode()) > 0 else 'N/A',
+                    'Missing Values': data[target_col].isnull().sum(),
+                    'Missing %': f"{(data[target_col].isnull().sum() / len(data)) * 100:.2f}%"
+                }
             else:
-                for col in missing_analysis.index:
-                    column_strategies[col] = global_strategy
-                    if global_strategy == "constant":
-                        col_type = str(st.session_state.preview_data[col].dtype)
-                        const_value = st.text_input(
-                            f"Constant value for {col}:",
-                            value="0" if 'int' in col_type or 'float' in col_type else "Unknown",
-                            key=f"const_global_{col}"
-                        )
-                        column_strategies[f"{col}_constant"] = const_value
+                stats = {
+                    'Mean': f"{data[target_col].mean():.4f}",
+                    'Std Dev': f"{data[target_col].std():.4f}",
+                    'Min': f"{data[target_col].min():.4f}",
+                    'Max': f"{data[target_col].max():.4f}",
+                    'Missing Values': data[target_col].isnull().sum()
+                }
             
-            # Apply missing value handling
-            if st.button("🔄 Apply Missing Value Handling", key="apply_missing"):
-                try:
-                    temp_data = st.session_state.preview_data.copy()
-                    
-                    for col in missing_analysis.index:
-                        strategy = column_strategies.get(col, 'drop')
-                        
-                        if strategy == "drop":
-                            temp_data = temp_data.dropna(subset=[col])
-                        elif strategy == "mean":
-                            temp_data[col] = temp_data[col].fillna(temp_data[col].mean())
-                        elif strategy == "median":
-                            temp_data[col] = temp_data[col].fillna(temp_data[col].median())
-                        elif strategy == "mode":
-                            mode_val = temp_data[col].mode()
-                            if len(mode_val) > 0:
-                                temp_data[col] = temp_data[col].fillna(mode_val[0])
-                        elif strategy == "constant":
-                            const_val = column_strategies.get(f"{col}_constant", "Unknown")
-                            temp_data[col] = temp_data[col].fillna(const_val)
-                    
-                    st.session_state.preview_data = temp_data
-                    st.session_state.missing_strategies = column_strategies
-                    st.success("✅ Missing values handled!")
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"❌ Error handling missing values: {str(e)}")
-    else:
-        st.success("🎉 No missing values found in the current dataset!")
-
-def _handle_categorical_encoding():
-    """Handle categorical encoding."""
-    st.subheader("🏷️ Categorical Encoding")
+            for key, value in stats.items():
+                st.write(f"- **{key}:** {value}")
     
-    categorical_cols = st.session_state.preview_data.select_dtypes(include=['object', 'category']).columns
-    categorical_cols = [col for col in categorical_cols if col != st.session_state.target_column]
+    # Missing data analysis
+    missing_data = data.isnull().sum()
+    if missing_data.sum() > 0:
+        st.subheader("❓ Missing Data Analysis")
+        
+        missing_df = pd.DataFrame({
+            'Column': missing_data.index,
+            'Missing Count': missing_data.values,
+            'Missing %': (missing_data.values / len(data)) * 100
+        })
+        missing_df = missing_df[missing_df['Missing Count'] > 0].sort_values('Missing Count', ascending=False)
+        
+        if len(missing_df) > 0:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                fig_missing = px.bar(
+                    missing_df,
+                    x='Column',
+                    y='Missing %',
+                    title='Missing Data by Column (%)',
+                    color='Missing %',
+                    color_continuous_scale='Reds'
+                )
+                fig_missing.update_xaxes(tickangle=45)
+                st.plotly_chart(fig_missing, use_container_width=True)
+            
+            with col2:
+                st.write("**Missing Data Details:**")
+                st.dataframe(missing_df, use_container_width=True)
+        else:
+            st.success("🎉 No missing data found!")
+    else:
+        st.success("🎉 No missing data found!")
+    
+    # Numeric features analysis
+    numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+    if st.session_state.target_column in numeric_cols:
+        numeric_cols.remove(st.session_state.target_column)
+    
+    if len(numeric_cols) > 0:
+        st.subheader("📈 Numeric Features Analysis")
+        
+        # Select feature for detailed analysis
+        selected_numeric = st.selectbox(
+            "Select a numeric feature to analyze:",
+            numeric_cols,
+            key="numeric_analysis"
+        )
+        
+        if selected_numeric:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Distribution plot
+                fig_dist = px.histogram(
+                    data,
+                    x=selected_numeric,
+                    nbins=30,
+                    title=f"Distribution: {selected_numeric}"
+                )
+                st.plotly_chart(fig_dist, use_container_width=True)
+            
+            with col2:
+                # Box plot
+                fig_box = px.box(
+                    data,
+                    y=selected_numeric,
+                    title=f"Box Plot: {selected_numeric}"
+                )
+                st.plotly_chart(fig_box, use_container_width=True)
+            
+            # Statistics
+            st.write(f"**Statistics for {selected_numeric}:**")
+            stats = data[selected_numeric].describe()
+            stats_cols = st.columns(len(stats))
+            for i, (stat_name, stat_value) in enumerate(stats.items()):
+                with stats_cols[i]:
+                    st.metric(stat_name.title(), f"{stat_value:.4f}")
+    
+    # Categorical features analysis
+    categorical_cols = data.select_dtypes(include=['object', 'category']).columns.tolist()
+    if st.session_state.target_column in categorical_cols:
+        categorical_cols.remove(st.session_state.target_column)
     
     if len(categorical_cols) > 0:
-        col1, col2 = st.columns([1, 1])
+        st.subheader("🏷️ Categorical Features Analysis")
         
-        with col1:
-            st.write("**Categorical Columns Analysis**")
-            
-            cat_analysis = []
-            for col in categorical_cols:
-                unique_count = st.session_state.preview_data[col].nunique()
-                memory_usage = st.session_state.preview_data[col].memory_usage(deep=True) / 1024
-                top_values = st.session_state.preview_data[col].value_counts().head(3).to_dict()
-                
-                cat_analysis.append({
-                    'Column': col,
-                    'Unique Values': unique_count,
-                    'Memory (KB)': f"{memory_usage:.1f}",
-                    'Top Values': str(top_values)
-                })
-            
-            cat_df = pd.DataFrame(cat_analysis)
-            st.dataframe(cat_df, use_container_width=True)
-            
-            encoding_method = st.selectbox(
-                "Select encoding method:",
-                ["onehot", "ordinal", "target", "binary", "custom"],
-                help="Choose how to encode categorical variables"
-            )
+        selected_categorical = st.selectbox(
+            "Select a categorical feature to analyze:",
+            categorical_cols,
+            key="categorical_analysis"
+        )
         
-        with col2:
-            st.write("**Encoding Preview**")
+        if selected_categorical:
+            col1, col2 = st.columns(2)
             
-            if st.button("🔄 Apply Categorical Encoding", key="apply_encoding"):
-                try:
-                    temp_data = st.session_state.preview_data.copy()
-                    
-                    for col in categorical_cols:
-                        unique_count = temp_data[col].nunique()
-                        
-                        if encoding_method == "onehot":
-                            if unique_count > 20:
-                                top_categories = temp_data[col].value_counts().head(15).index
-                                temp_data[col] = temp_data[col].apply(
-                                    lambda x: x if x in top_categories else 'Other'
-                                )
-                            
-                            encoded = pd.get_dummies(temp_data[col], prefix=col, drop_first=True)
-                            temp_data = pd.concat([temp_data.drop(columns=[col]), encoded], axis=1)
-                            
-                        elif encoding_method == "ordinal":
-                            from sklearn.preprocessing import LabelEncoder
-                            le = LabelEncoder()
-                            temp_data[col] = le.fit_transform(temp_data[col].astype(str))
-                    
-                    st.session_state.preview_data = temp_data
-                    st.session_state.encoding_method = encoding_method
-                    st.success("✅ Categorical encoding applied!")
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"❌ Error applying encoding: {str(e)}")
-    else:
-        st.info("ℹ️ No categorical columns found in the current dataset")
-
-def _handle_feature_engineering():
-    """Handle feature engineering and scaling."""
-    st.subheader("📊 Feature Engineering & Scaling")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("**Feature Scaling**")
-        
-        numeric_cols = st.session_state.preview_data.select_dtypes(include=[np.number]).columns
-        numeric_cols = [col for col in numeric_cols if col != st.session_state.target_column]
-        
-        if len(numeric_cols) > 0:
-            scaling_method = st.selectbox(
-                "Select scaling method:",
-                ["none", "standard", "minmax", "robust"],
-                help="Choose how to scale numeric features"
-            )
-            
-            if scaling_method != "none":
-                scale_columns = st.multiselect(
-                    "Select columns to scale:",
-                    options=numeric_cols,
-                    default=numeric_cols,
-                    help="Choose which numeric columns to scale"
+            with col1:
+                # Count plot
+                value_counts = data[selected_categorical].value_counts().head(20)  # Limit to top 20
+                fig_count = px.bar(
+                    x=value_counts.index,
+                    y=value_counts.values,
+                    title=f"Value Counts: {selected_categorical}",
+                    labels={'x': selected_categorical, 'y': 'Count'}
                 )
+                fig_count.update_xaxes(tickangle=45)
+                st.plotly_chart(fig_count, use_container_width=True)
             
-            if scaling_method != "none" and st.button("📊 Apply Scaling", key="apply_scaling"):
-                try:
-                    from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
-                    
-                    temp_data = st.session_state.preview_data.copy()
-                    
-                    if scaling_method == "standard":
-                        scaler = StandardScaler()
-                    elif scaling_method == "minmax":
-                        scaler = MinMaxScaler()
-                    elif scaling_method == "robust":
-                        scaler = RobustScaler()
-                    
-                    if 'scale_columns' in locals() and scale_columns:
-                        temp_data[scale_columns] = scaler.fit_transform(temp_data[scale_columns])
-                    
-                    st.session_state.preview_data = temp_data
-                    st.session_state.scaling_method = scaling_method
-                    st.success("✅ Scaling applied!")
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"❌ Error applying scaling: {str(e)}")
-        else:
-            st.info("ℹ️ No numeric columns available for scaling")
+            with col2:
+                # Statistics
+                st.write(f"**Statistics for {selected_categorical}:**")
+                unique_count = data[selected_categorical].nunique()
+                most_frequent = data[selected_categorical].mode().iloc[0] if len(data[selected_categorical].mode()) > 0 else 'N/A'
+                missing_count = data[selected_categorical].isnull().sum()
+                
+                st.metric("Unique Values", unique_count)
+                st.metric("Most Frequent", str(most_frequent))
+                st.metric("Missing Values", missing_count)
+                
+                if unique_count <= 20:
+                    st.write("**All unique values:**")
+                    st.write(data[selected_categorical].value_counts().to_dict())
     
-    with col2:
-        st.write("**Advanced Feature Engineering**")
+    # Correlation analysis
+    if len(numeric_cols) > 1:
+        st.subheader("🔗 Correlation Analysis")
         
-        feature_engineering = st.checkbox("Enable feature engineering", help="Create additional features")
+        # Include target if numeric
+        corr_cols = numeric_cols.copy()
+        if (st.session_state.target_column and 
+            st.session_state.target_column in data.select_dtypes(include=[np.number]).columns):
+            corr_cols.append(st.session_state.target_column)
         
-        if feature_engineering:
-            engineering_options = st.multiselect(
-                "Select feature engineering techniques:",
-                [
-                    "polynomial_features",
-                    "statistical_features",
-                    "binning"
-                ],
-                help="Choose which feature engineering techniques to apply"
+        correlation_matrix = data[corr_cols].corr()
+        
+        # Correlation heatmap
+        fig_corr = px.imshow(
+            correlation_matrix,
+            text_auto=True,
+            aspect="auto",
+            title="Feature Correlation Heatmap",
+            color_continuous_scale='RdBu',
+            zmin=-1,
+            zmax=1
+        )
+        fig_corr.update_layout(height=600)
+        st.plotly_chart(fig_corr, use_container_width=True)
+        
+        # Highest correlations with target
+        if (st.session_state.target_column and 
+            st.session_state.target_column in correlation_matrix.columns):
+            
+            target_corr = correlation_matrix[st.session_state.target_column].abs().sort_values(ascending=False)
+            target_corr = target_corr[target_corr.index != st.session_state.target_column]
+            
+            if len(target_corr) > 0:
+                st.write(f"**Features most correlated with {st.session_state.target_column}:**")
+                top_corr = target_corr.head(10)
+                
+                fig_target_corr = px.bar(
+                    x=top_corr.values,
+                    y=top_corr.index,
+                    orientation='h',
+                    title=f"Correlation with {st.session_state.target_column}",
+                    labels={'x': 'Absolute Correlation', 'y': 'Features'}
+                )
+                st.plotly_chart(fig_target_corr, use_container_width=True)
+    
+    # Feature relationships (scatter plots)
+    if len(numeric_cols) >= 2:
+        st.subheader("📊 Feature Relationships")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            x_feature = st.selectbox("Select X feature:", numeric_cols, key="scatter_x")
+        with col2:
+            y_feature = st.selectbox("Select Y feature:", numeric_cols, key="scatter_y", 
+                                   index=1 if len(numeric_cols) > 1 else 0)
+        
+        if x_feature != y_feature:
+            # Color by target if categorical
+            color_col = None
+            if (st.session_state.target_column and 
+                st.session_state.problem_type == 'classification'):
+                color_col = st.session_state.target_column
+            
+            fig_scatter = px.scatter(
+                data,
+                x=x_feature,
+                y=y_feature,
+                color=color_col,
+                title=f"{x_feature} vs {y_feature}",
+                opacity=0.6
             )
-            
-            if st.button("🚀 Apply Feature Engineering", key="apply_engineering"):
-                try:
-                    temp_data = st.session_state.preview_data.copy()
-                    
-                    if "statistical_features" in engineering_options:
-                        for col in numeric_cols[:3]:  # Limit to first 3 columns
-                            temp_data[f"{col}_squared"] = temp_data[col] ** 2
-                            temp_data[f"{col}_log"] = np.log1p(np.abs(temp_data[col]))
-                    
-                    st.session_state.preview_data = temp_data
-                    st.session_state.feature_engineering = engineering_options
-                    st.success("✅ Feature engineering applied!")
-                    st.rerun()
-                    
-                except Exception as e:
-                    st.error(f"❌ Error in feature engineering: {str(e)}")
-
-def _handle_final_preview(data_handler):
-    """Handle final preview and configuration saving."""
-    st.subheader("🔍 Final Data Preview & Summary")
+            st.plotly_chart(fig_scatter, use_container_width=True)
     
-    col1, col2 = st.columns([2, 1])
+    # Data quality summary
+    st.subheader("✅ Data Quality Summary")
     
-    with col1:
-        st.write("**Transformed Dataset Preview**")
-        
-        # Show shape comparison
-        original_shape = st.session_state.data.shape
-        current_shape = st.session_state.preview_data.shape
-        
-        col_a, col_b, col_c = st.columns(3)
-        with col_a:
-            st.metric("Original Rows", f"{original_shape[0]:,}")
-        with col_b:
-            st.metric("Current Rows", f"{current_shape[0]:,}", delta=current_shape[0] - original_shape[0])
-        with col_c:
-            st.metric("Current Columns", f"{current_shape[1]:,}", delta=current_shape[1] - original_shape[1])
-        
-        # Show data preview
-        st.dataframe(st.session_state.preview_data.head(100), use_container_width=True)
-        
-        # Data quality summary
-        st.write("**Data Quality Summary**")
-        quality_checks = {
-            "Missing Values": st.session_state.preview_data.isnull().sum().sum(),
-            "Duplicate Rows": st.session_state.preview_data.duplicated().sum(),
-            "Numeric Columns": len(st.session_state.preview_data.select_dtypes(include=[np.number]).columns),
-            "Object Columns": len(st.session_state.preview_data.select_dtypes(include=['object']).columns),
-            "Memory Usage (MB)": st.session_state.preview_data.memory_usage(deep=True).sum() / 1024 / 1024
+    quality_issues = []
+    
+    # Check for duplicates
+    duplicate_count = data.duplicated().sum()
+    if duplicate_count > 0:
+        quality_issues.append(f"🔄 {duplicate_count:,} duplicate rows found")
+    
+    # Check for constant columns
+    constant_cols = []
+    for col in data.columns:
+        if data[col].nunique() <= 1:
+            constant_cols.append(col)
+    
+    if constant_cols:
+        quality_issues.append(f"⚠️ Constant columns: {', '.join(constant_cols)}")
+    
+    # Check for high cardinality categorical columns
+    high_cardinality = []
+    for col in categorical_cols:
+        unique_ratio = data[col].nunique() / len(data)
+        if unique_ratio > 0.9:
+            high_cardinality.append(col)
+    
+    if high_cardinality:
+        quality_issues.append(f"📈 High cardinality columns: {', '.join(high_cardinality)}")
+    
+    # Check for columns with many missing values
+    high_missing = []
+    for col in data.columns:
+        missing_ratio = data[col].isnull().sum() / len(data)
+        if missing_ratio > 0.5:
+            high_missing.append(col)
+    
+    if high_missing:
+        quality_issues.append(f"❓ Columns with >50% missing: {', '.join(high_missing)}")
+    
+    if quality_issues:
+        st.warning("**Data Quality Issues Found:**")
+        for issue in quality_issues:
+            st.write(f"- {issue}")
+    else:
+        st.success("🎉 No major data quality issues detected!")
+    
+    # Data sample
+    st.subheader("📄 Data Sample")
+    sample_size = st.slider("Sample size to display:", 5, min(100, len(data)), 10)
+    
+    display_option = st.radio("Display option:", ["First rows", "Random sample", "Last rows"])
+    
+    if display_option == "First rows":
+        sample_data = data.head(sample_size)
+    elif display_option == "Random sample":
+        sample_data = data.sample(n=min(sample_size, len(data)), random_state=42)
+    else:
+        sample_data = data.tail(sample_size)
+    
+    st.dataframe(sample_data, use_container_width=True)
+    
+    # Export option
+    if st.button("📥 Download Data Summary Report"):
+        # Create summary report
+        summary_report = {
+            'Dataset Overview': {
+                'Total Rows': len(data),
+                'Total Columns': len(data.columns),
+                'Missing Data %': f"{missing_pct:.2f}%",
+                'Memory Usage (MB)': f"{memory_mb:.2f}"
+            },
+            'Data Types': dtype_counts.to_dict(),
+            'Missing Data': missing_df.to_dict('records') if 'missing_df' in locals() else "No missing data",
+            'Quality Issues': quality_issues if quality_issues else "No issues detected"
         }
         
-        quality_df = pd.DataFrame(list(quality_checks.items()), columns=['Metric', 'Value'])
-        st.dataframe(quality_df, use_container_width=True)
+        import json
+        report_json = json.dumps(summary_report, indent=2, default=str)
+        
+        st.download_button(
+            label="📥 Download JSON Report",
+            data=report_json,
+            file_name="data_exploration_report.json",
+            mime="application/json"
+        )
     
-    with col2:
-        st.write("**Transformation Summary**")
-        
-        transformations = []
-        
-        if st.session_state.get('columns_to_remove'):
-            transformations.append(f"✅ Removed {len(st.session_state.columns_to_remove)} columns")
-        
-        if st.session_state.get('missing_strategies'):
-            transformations.append("✅ Applied missing value handling")
-        
-        if st.session_state.get('encoding_method'):
-            transformations.append(f"✅ Applied {st.session_state.encoding_method} encoding")
-        
-        if st.session_state.get('scaling_method', 'none') != 'none':
-            transformations.append(f"✅ Applied {st.session_state.scaling_method} scaling")
-        
-        if st.session_state.get('feature_engineering'):
-            transformations.append("✅ Applied feature engineering")
-        
-        if transformations:
-            for transform in transformations:
-                st.write(transform)
-        else:
-            st.info("No transformations applied yet")
-        
-        # Save preprocessing configuration
-        final_config = {
-            'columns_to_remove': st.session_state.get('columns_to_remove', []),
-            'missing_strategies': st.session_state.get('missing_strategies', {}),
-            'encoding_method': st.session_state.get('encoding_method', 'onehot'),
-            'scaling_method': st.session_state.get('scaling_method', 'none'),
-            'feature_engineering': st.session_state.get('feature_engineering', [])
-        }
-        
-        st.session_state.preprocessing_config = final_config
-        
-        # Download processed data
-        if st.button("💾 Save Processed Data", key="save_processed"):
-            csv = st.session_state.preview_data.to_csv(index=False)
-            st.download_button(
-                label="📥 Download Processed CSV",
-                data=csv,
-                file_name=f"processed_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
-            )
-    
-    # Control buttons
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("🔄 Reset All Changes", key="reset_all"):
-            st.session_state.preview_data = st.session_state.data.copy()
-            st.session_state.preprocessing_config = {}
-            st.success("✅ Reset to original data")
-            st.rerun()
-    
-    with col2:
-        if st.button("↩️ Revert Last Change", key="revert_last"):
-            st.session_state.preview_data = st.session_state.data.copy()
-            st.info("ℹ️ Reverted to original data")
-            st.rerun()
-    
-    with col3:
-        if st.button("🎯 Proceed to Model Training", type="primary", use_container_width=True):
-            # Final validation
-            if st.session_state.target_column not in st.session_state.preview_data.columns:
-                st.error("❌ Target column was removed during preprocessing!")
-            elif st.session_state.preview_data.empty:
-                st.error("❌ No data remaining after preprocessing!")
-            elif len(st.session_state.preview_data.columns) < 2:
-                st.error("❌ Need at least 2 columns for training!")
-            else:
-                st.session_state.current_step = "train"
-                st.rerun()
+    # Next step
+    if st.button("⚙️ Proceed to Data Preprocessing", type="primary", use_container_width=True):
+        st.session_state.current_step = "preprocess"
+        st.rerun()
