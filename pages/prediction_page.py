@@ -1,6 +1,6 @@
 """
 Prediction Page
-Handles single and batch predictions
+Handles single and batch predictions with back navigation
 """
 
 import streamlit as st
@@ -12,12 +12,32 @@ import logging
 logger = logging.getLogger(__name__)
 
 def page_predictions(predictor):
-    """Predictions page."""
+    """Predictions page with back navigation."""
+    # Back navigation
+    col_back, col_title = st.columns([1, 4])
+    with col_back:
+        if st.button("⬅️ Back to Evaluation", use_container_width=True):
+            st.session_state.current_step = "evaluate"
+            st.rerun()
+    
     if st.session_state.trained_model is None:
         st.warning("⚠️ Please train a model first")
         return
     
     st.header("🔮 Model Predictions")
+    st.markdown("*Make predictions with your trained model*")
+    
+    # Show model info
+    with st.expander("📋 Model Information"):
+        model_type = type(st.session_state.trained_model).__name__
+        st.write(f"**Model Type:** {model_type}")
+        st.write(f"**Target Column:** {st.session_state.target_column}")
+        st.write(f"**Problem Type:** {st.session_state.problem_type}")
+        
+        if hasattr(st.session_state, 'fast_training_results'):
+            results = st.session_state.fast_training_results
+            if 'training_time' in results:
+                st.write(f"**Training Time:** {results['training_time']:.2f} seconds")
     
     # Prediction modes
     tab1, tab2 = st.tabs(["🎯 Single Prediction", "📊 Batch Predictions"])
@@ -45,6 +65,12 @@ def _handle_single_prediction(predictor):
         feature_columns = [col for col in data_for_features.columns 
                          if col != st.session_state.target_column]
         
+        if len(feature_columns) == 0:
+            st.error("❌ No feature columns available for prediction")
+            return
+        
+        st.write(f"**Enter values for {len(feature_columns)} features:**")
+        
         # Dynamic input fields based on data types
         col1, col2 = st.columns(2)
         for i, column in enumerate(feature_columns):
@@ -61,7 +87,8 @@ def _handle_single_prediction(predictor):
                         min_value=min_val,
                         max_value=max_val,
                         value=mean_val,
-                        key=f"input_{column}"
+                        key=f"input_{column}",
+                        help=f"Range: {min_val:.2f} to {max_val:.2f}"
                     )
                 else:
                     unique_values = data_for_features[column].unique()
@@ -71,7 +98,8 @@ def _handle_single_prediction(predictor):
                         input_data[column] = st.selectbox(
                             f"{column}",
                             options=unique_values,
-                            key=f"input_{column}"
+                            key=f"input_{column}",
+                            help=f"{len(unique_values)} unique values"
                         )
                     else:
                         input_data[column] = st.text_input(
@@ -97,7 +125,10 @@ def _handle_single_prediction(predictor):
                 col1, col2 = st.columns(2)
                 with col1:
                     if isinstance(prediction, (int, float)):
-                        st.metric("Predicted Value", f"{prediction:.4f}")
+                        if st.session_state.problem_type == "regression":
+                            st.metric("Predicted Value", f"{prediction:.4f}")
+                        else:
+                            st.metric("Predicted Class", str(prediction))
                     else:
                         st.metric("Predicted Value", str(prediction))
                 
@@ -110,11 +141,18 @@ def _handle_single_prediction(predictor):
                                 input_df
                             )
                             st.metric("Confidence", f"{prob:.2%}")
-                        except:
-                            pass
+                        except Exception as e:
+                            st.info("Confidence not available")
+                
+                # Show input summary
+                with st.expander("📋 Input Summary"):
+                    input_summary = pd.DataFrame([input_data]).T
+                    input_summary.columns = ['Value']
+                    st.dataframe(input_summary, use_container_width=True)
             
             except Exception as e:
                 st.error(f"❌ Prediction error: {str(e)}")
+                logger.error(f"Single prediction error: {e}")
 
 def _handle_batch_prediction(predictor):
     """Handle batch predictions."""
@@ -124,7 +162,8 @@ def _handle_batch_prediction(predictor):
     batch_file = st.file_uploader(
         "Upload file for batch prediction",
         type=['csv', 'xlsx'],
-        help="File should have the same columns as training data (except target)"
+        help="File should have the same columns as training data (except target)",
+        key="batch_file"
     )
     
     if batch_file is not None:
@@ -189,15 +228,16 @@ def _handle_batch_prediction(predictor):
                         if st.session_state.problem_type == "classification":
                             try:
                                 confidence_scores = []
-                                for _, row in aligned_data.iterrows():
+                                for idx in range(len(aligned_data)):
+                                    row_data = aligned_data.iloc[idx:idx+1]
                                     prob = predictor.predict_probability(
                                         st.session_state.trained_model,
-                                        pd.DataFrame([row])
+                                        row_data
                                     )
                                     confidence_scores.append(prob)
                                 results_df['Confidence'] = confidence_scores
-                            except:
-                                pass  # Skip confidence if not available
+                            except Exception as e:
+                                logger.warning(f"Could not compute confidence: {e}")
                         
                         st.success("✅ Batch predictions completed!")
                         st.dataframe(results_df, use_container_width=True)
@@ -208,7 +248,8 @@ def _handle_batch_prediction(predictor):
                             label="📥 Download Results",
                             data=csv,
                             file_name=f"predictions_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                            mime="text/csv"
+                            mime="text/csv",
+                            use_container_width=True
                         )
                         
                         # Show prediction summary
@@ -217,7 +258,15 @@ def _handle_batch_prediction(predictor):
                         if st.session_state.problem_type == "classification":
                             pred_counts = pd.Series(predictions).value_counts()
                             st.write("**Prediction Distribution:**")
-                            st.dataframe(pred_counts, use_container_width=True)
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.dataframe(pred_counts, use_container_width=True)
+                            with col2:
+                                import plotly.express as px
+                                fig = px.pie(values=pred_counts.values, names=pred_counts.index, 
+                                           title="Prediction Distribution")
+                                st.plotly_chart(fig, use_container_width=True)
                         else:
                             st.write("**Prediction Statistics:**")
                             pred_stats = pd.Series(predictions).describe()
@@ -225,6 +274,7 @@ def _handle_batch_prediction(predictor):
                     
                     except Exception as e:
                         st.error(f"❌ Batch prediction error: {str(e)}")
+                        logger.error(f"Batch prediction error: {e}")
         
         except Exception as e:
             st.error(f"❌ Error loading batch file: {str(e)}")
@@ -253,7 +303,7 @@ def _handle_batch_prediction(predictor):
         st.dataframe(format_df, use_container_width=True)
         
         # Download template
-        if st.button("📥 Download Template"):
+        if st.button("📥 Download Template", use_container_width=True):
             template_df = pd.DataFrame(columns=feature_columns)
             # Add one sample row with example data
             if len(sample_data) > 0:
@@ -271,5 +321,6 @@ def _handle_batch_prediction(predictor):
                 label="📥 Download CSV Template",
                 data=csv_template,
                 file_name="prediction_template.csv",
-                mime="text/csv"
+                mime="text/csv",
+                use_container_width=True
             )
