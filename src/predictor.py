@@ -1,6 +1,6 @@
 """
 Predictor Module
-Handles model predictions and inference
+Handles model predictions and inference (No PyCaret dependency)
 """
 
 import pandas as pd
@@ -12,7 +12,7 @@ import streamlit as st
 logger = logging.getLogger(__name__)
 
 class Predictor:
-    """Handles model predictions and inference."""
+    """Handles model predictions and inference without PyCaret."""
     
     def __init__(self, config: Dict[str, Any]):
         # Handle None config gracefully
@@ -22,64 +22,39 @@ class Predictor:
         self.config = config
     
     def predict_single(self, model, input_data: pd.DataFrame) -> Union[float, str, int]:
-        """Make prediction for a single record."""
+        """Make prediction for a single record using fast trainer."""
         try:
-            # Import appropriate PyCaret module
-            if hasattr(st.session_state, 'problem_type'):
-                if st.session_state.problem_type == 'classification':
-                    import pycaret.classification as pc
-                    predictions = pc.predict_model(model, data=input_data)
-                else:
-                    import pycaret.regression as pr
-                    predictions = pr.predict_model(model, data=input_data)
-            else:
-                # Default to classification
-                import pycaret.classification as pc
-                predictions = pc.predict_model(model, data=input_data)
+            # Use the fast trainer to make predictions
+            trainer = st.session_state.get('fast_trainer')
             
-            # Extract prediction value
-            if 'prediction_label' in predictions.columns:
-                prediction = predictions['prediction_label'].iloc[0]
-            elif 'Label' in predictions.columns:
-                prediction = predictions['Label'].iloc[0]
+            if trainer and hasattr(trainer, 'predict'):
+                prediction = trainer.predict(model, input_data)
+                return prediction[0] if isinstance(prediction, np.ndarray) else prediction
             else:
-                # Take the last column as prediction
-                prediction = predictions.iloc[0, -1]
-            
-            logger.info("Single prediction completed successfully")
-            return prediction
+                # Fallback: direct model prediction
+                # Prepare data using the same preprocessing as training
+                processed_data = self._preprocess_for_prediction(input_data)
+                prediction = model.predict(processed_data)
+                return prediction[0] if isinstance(prediction, np.ndarray) else prediction
             
         except Exception as e:
             logger.error(f"Single prediction error: {e}")
             raise
     
     def predict_batch(self, model, input_data: pd.DataFrame) -> np.ndarray:
-        """Make predictions for batch data."""
+        """Make predictions for batch data using fast trainer."""
         try:
-            # Import appropriate PyCaret module
-            if hasattr(st.session_state, 'problem_type'):
-                if st.session_state.problem_type == 'classification':
-                    import pycaret.classification as pc
-                    predictions = pc.predict_model(model, data=input_data)
-                else:
-                    import pycaret.regression as pr
-                    predictions = pr.predict_model(model, data=input_data)
-            else:
-                # Default to classification
-                import pycaret.classification as pc
-                predictions = pc.predict_model(model, data=input_data)
+            # Use the fast trainer to make predictions
+            trainer = st.session_state.get('fast_trainer')
             
-            # Extract prediction values
-            if 'prediction_label' in predictions.columns:
-                prediction_values = predictions['prediction_label'].values
-            elif 'Label' in predictions.columns:
-                prediction_values = predictions['Label'].values
+            if trainer and hasattr(trainer, 'predict'):
+                predictions = trainer.predict(model, input_data)
+                return predictions
             else:
-                # Take the last column as predictions
-                prediction_values = predictions.iloc[:, -1].values
-            
-            logger.info(f"Batch prediction completed for {len(input_data)} records")
-            return prediction_values
+                # Fallback: direct model prediction
+                processed_data = self._preprocess_for_prediction(input_data)
+                predictions = model.predict(processed_data)
+                return predictions
             
         except Exception as e:
             logger.error(f"Batch prediction error: {e}")
@@ -88,27 +63,67 @@ class Predictor:
     def predict_probability(self, model, input_data: pd.DataFrame) -> float:
         """Get prediction probability for classification models."""
         try:
-            if hasattr(st.session_state, 'problem_type') and st.session_state.problem_type == 'classification':
-                import pycaret.classification as pc
-                predictions = pc.predict_model(model, data=input_data)
+            trainer = st.session_state.get('fast_trainer')
+            
+            if (st.session_state.problem_type == 'classification' and 
+                hasattr(model, 'predict_proba')):
                 
-                # Look for probability columns
-                prob_columns = [col for col in predictions.columns if 'prediction_score' in col.lower()]
-                
-                if prob_columns:
-                    # Return the maximum probability
-                    max_prob = predictions[prob_columns].max(axis=1).iloc[0]
-                    return float(max_prob)
+                if trainer and hasattr(trainer, 'predict_proba'):
+                    probabilities = trainer.predict_proba(model, input_data)
                 else:
-                    # Fallback: return 0.5 if no probability available
-                    return 0.5
+                    # Fallback: direct model prediction
+                    processed_data = self._preprocess_for_prediction(input_data)
+                    probabilities = model.predict_proba(processed_data)
+                
+                # Return the maximum probability
+                if len(probabilities.shape) > 1:
+                    max_prob = np.max(probabilities[0])
+                else:
+                    max_prob = probabilities[0]
+                
+                return float(max_prob)
             else:
-                # Not applicable for regression
+                # Not applicable for regression or models without probabilities
                 return 0.0
                 
         except Exception as e:
             logger.error(f"Probability prediction error: {e}")
             return 0.0
+    
+    def _preprocess_for_prediction(self, input_data: pd.DataFrame) -> pd.DataFrame:
+        """Preprocess input data for prediction."""
+        try:
+            # Get the preprocessing configuration used during training
+            preprocessing_config = st.session_state.get('preprocessing_config', {})
+            
+            # Apply the same preprocessing as training
+            from src.data_handler import DataHandler
+            data_handler = DataHandler(self.config)
+            
+            # Create a temporary dataset with target column for preprocessing
+            temp_data = input_data.copy()
+            
+            # Add a dummy target column if it doesn't exist
+            target_column = st.session_state.get('target_column')
+            if target_column and target_column not in temp_data.columns:
+                temp_data[target_column] = 0  # Dummy values
+            
+            # Apply preprocessing
+            processed_data = data_handler.apply_preprocessing(
+                temp_data, 
+                target_column, 
+                preprocessing_config
+            )
+            
+            # Remove the target column if it was added
+            if target_column and target_column in processed_data.columns:
+                processed_data = processed_data.drop(columns=[target_column])
+            
+            return processed_data
+            
+        except Exception as e:
+            logger.warning(f"Preprocessing failed, using original data: {e}")
+            return input_data
     
     def predict_with_explanation(self, model, input_data: pd.DataFrame) -> Dict[str, Any]:
         """Make prediction with model explanation."""
@@ -118,10 +133,10 @@ class Predictor:
             
             # Get probability if classification
             probability = None
-            if hasattr(st.session_state, 'problem_type') and st.session_state.problem_type == 'classification':
+            if st.session_state.problem_type == 'classification':
                 probability = self.predict_probability(model, input_data)
             
-            # Try to get SHAP values for explanation
+            # Try to get feature importance for explanation
             explanation = None
             try:
                 explanation = self._get_prediction_explanation(model, input_data)
@@ -142,31 +157,39 @@ class Predictor:
             raise
     
     def _get_prediction_explanation(self, model, input_data: pd.DataFrame) -> Dict[str, Any]:
-        """Get SHAP-based explanation for prediction."""
+        """Get explanation for prediction using feature importance."""
         try:
-            import shap
+            # Get feature importance from the model
+            feature_importance = None
             
-            # This is a simplified explanation - in practice, you'd need to 
-            # extract the underlying model from PyCaret and use appropriate SHAP explainer
+            if hasattr(model, 'feature_importances_'):
+                feature_importance = model.feature_importances_
+            elif hasattr(model, 'coef_'):
+                feature_importance = np.abs(model.coef_).flatten()
             
-            # For now, return feature importance as explanation
-            feature_names = input_data.columns.tolist()
-            feature_values = input_data.iloc[0].values
+            if feature_importance is not None:
+                # Get feature names
+                processed_data = self._preprocess_for_prediction(input_data)
+                feature_names = processed_data.columns.tolist()
+                
+                # Ensure lengths match
+                if len(feature_importance) == len(feature_names):
+                    # Create explanation
+                    feature_values = processed_data.iloc[0].values
+                    
+                    explanation = {
+                        'feature_importance': dict(zip(feature_names, feature_importance)),
+                        'feature_values': dict(zip(feature_names, feature_values)),
+                        'top_features': sorted(
+                            zip(feature_names, feature_importance), 
+                            key=lambda x: abs(x[1]), 
+                            reverse=True
+                        )[:5]
+                    }
+                    
+                    return explanation
             
-            # Create mock importance scores (in practice, use SHAP)
-            importance_scores = np.random.uniform(-1, 1, len(feature_names))
-            
-            explanation = {
-                'feature_importance': dict(zip(feature_names, importance_scores)),
-                'feature_values': dict(zip(feature_names, feature_values)),
-                'top_features': sorted(
-                    zip(feature_names, importance_scores), 
-                    key=lambda x: abs(x[1]), 
-                    reverse=True
-                )[:5]
-            }
-            
-            return explanation
+            return None
             
         except Exception as e:
             logger.error(f"Explanation generation error: {e}")
@@ -183,20 +206,20 @@ class Predictor:
             results_df['prediction'] = predictions
             
             # Add confidence scores for classification
-            if hasattr(st.session_state, 'problem_type') and st.session_state.problem_type == 'classification':
+            if st.session_state.problem_type == 'classification' and hasattr(model, 'predict_proba'):
                 try:
-                    import pycaret.classification as pc
-                    pred_df = pc.predict_model(model, data=input_data)
+                    trainer = st.session_state.get('fast_trainer')
                     
-                    # Look for probability columns
-                    prob_columns = [col for col in pred_df.columns if 'prediction_score' in col.lower()]
-                    
-                    if prob_columns:
-                        # Add confidence as maximum probability
-                        results_df['confidence'] = pred_df[prob_columns].max(axis=1)
+                    if trainer and hasattr(trainer, 'predict_proba'):
+                        probabilities = trainer.predict_proba(model, input_data)
                     else:
-                        results_df['confidence'] = 0.5  # Default confidence
-                        
+                        processed_data = self._preprocess_for_prediction(input_data)
+                        probabilities = model.predict_proba(processed_data)
+                    
+                    # Add confidence as maximum probability
+                    confidence = np.max(probabilities, axis=1)
+                    results_df['confidence'] = confidence
+                    
                 except Exception as e:
                     logger.warning(f"Could not compute confidence scores: {e}")
                     results_df['confidence'] = 0.5
@@ -252,7 +275,7 @@ class Predictor:
         try:
             processed_data = input_data.copy()
             
-            # Select only training columns
+            # Select only training columns that exist
             available_columns = [col for col in training_columns if col in processed_data.columns]
             processed_data = processed_data[available_columns]
             
@@ -274,10 +297,8 @@ class Predictor:
     def get_prediction_intervals(self, model, input_data: pd.DataFrame, confidence_level: float = 0.95) -> Dict[str, Any]:
         """Get prediction intervals for regression models."""
         try:
-            if hasattr(st.session_state, 'problem_type') and st.session_state.problem_type == 'regression':
-                # This is a simplified implementation
-                # In practice, you would use proper prediction interval methods
-                
+            if st.session_state.problem_type == 'regression':
+                # Get basic prediction
                 prediction = self.predict_single(model, input_data)
                 
                 # Mock prediction intervals (replace with proper implementation)
@@ -333,6 +354,7 @@ class Predictor:
             if format.lower() == 'csv':
                 return predictions_df.to_csv(index=False).encode('utf-8')
             elif format.lower() == 'excel':
+                from io import BytesIO
                 output = BytesIO()
                 predictions_df.to_excel(output, index=False)
                 return output.getvalue()
@@ -355,27 +377,24 @@ class Predictor:
             predictions = self.predict_batch(model, input_data)
             
             # Calculate metrics based on problem type
-            if hasattr(st.session_state, 'problem_type'):
-                if st.session_state.problem_type == 'classification':
-                    from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
-                    
-                    metrics = {
-                        'accuracy': accuracy_score(true_values, predictions),
-                        'precision': precision_score(true_values, predictions, average='weighted'),
-                        'recall': recall_score(true_values, predictions, average='weighted'),
-                        'f1_score': f1_score(true_values, predictions, average='weighted')
-                    }
-                else:
-                    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-                    
-                    metrics = {
-                        'mae': mean_absolute_error(true_values, predictions),
-                        'mse': mean_squared_error(true_values, predictions),
-                        'rmse': np.sqrt(mean_squared_error(true_values, predictions)),
-                        'r2': r2_score(true_values, predictions)
-                    }
+            if st.session_state.problem_type == 'classification':
+                from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+                
+                metrics = {
+                    'accuracy': accuracy_score(true_values, predictions),
+                    'precision': precision_score(true_values, predictions, average='weighted', zero_division=0),
+                    'recall': recall_score(true_values, predictions, average='weighted', zero_division=0),
+                    'f1_score': f1_score(true_values, predictions, average='weighted', zero_division=0)
+                }
             else:
-                metrics = {"message": "Problem type not specified"}
+                from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+                
+                metrics = {
+                    'mae': mean_absolute_error(true_values, predictions),
+                    'mse': mean_squared_error(true_values, predictions),
+                    'rmse': np.sqrt(mean_squared_error(true_values, predictions)),
+                    'r2': r2_score(true_values, predictions)
+                }
             
             return metrics
             
