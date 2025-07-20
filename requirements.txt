@@ -24,6 +24,7 @@ catboost>=1.2.2
 
 # FLAML (Microsoft - Ultra Fast AutoML)
 # flaml[automl]>=1.2.4
+FLAML==2.3.5
 
 # H2O AutoML (Great for large datasets)
 # h2o>=3.40.0
