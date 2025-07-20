@@ -1,7 +1,6 @@
 """
-Modern PyCaret-Streamlit ML Web Application
-Main Application Entry Point
-Version: 2.0.0
+Updated Main Application Entry Point
+Focuses on fast training and clean interface
 """
 
 import streamlit as st
@@ -16,20 +15,13 @@ logger = logging.getLogger(__name__)
 # Import custom modules with error handling
 try:
     from src.data_handler import DataHandler
-    from src.model_trainer import ModelTrainer
     from src.visualizer import Visualizer
     from src.predictor import Predictor
     
-    # Try to import fast trainers
-    try:
-        from src.fast_model_trainer import FastModelTrainer
-        from src.hybrid_trainer import HybridFastTrainer
-        FAST_TRAINING_AVAILABLE = True
-    except ImportError as e:
-        logger.warning(f"Fast training modules not available: {e}")
-        FastModelTrainer = None
-        HybridFastTrainer = None
-        FAST_TRAINING_AVAILABLE = False
+    # Import fast trainers
+    from src.fast_model_trainer import FastModelTrainer
+    from src.hybrid_trainer import HybridFastTrainer
+    FAST_TRAINING_AVAILABLE = True
 
 except ImportError as e:
     st.error(f"❌ Error importing core modules: {e}")
@@ -37,22 +29,13 @@ except ImportError as e:
 
 # Import page modules with error handling
 try:
+    # Import updated pages
     from pages.upload_page import page_data_upload
-    from pages.preprocessing_page import page_preprocessing
-    from pages.training_page import page_model_training
-    from pages.evaluation_page import page_model_evaluation
-    from pages.prediction_page import page_predictions
-    
-    # Import the exploration page we just created
     from pages.exploration_page import page_data_exploration
-    
-    # Try to import fast training page
-    try:
-        from pages.fast_training_page import page_fast_training
-        FAST_TRAINING_PAGE_AVAILABLE = True
-    except ImportError:
-        page_fast_training = None
-        FAST_TRAINING_PAGE_AVAILABLE = False
+    from pages.preprocessing_page import page_preprocessing
+    from pages.fast_training_page import page_fast_training_only
+    from pages.evaluation_page import page_model_evaluation_enhanced
+    from pages.prediction_page import page_predictions
 
 except ImportError as e:
     st.error(f"❌ Error importing page modules: {e}")
@@ -87,16 +70,15 @@ def main():
         
         # Initialize components
         data_handler = DataHandler(config)
-        model_trainer = ModelTrainer(config)
         visualizer = Visualizer(config)
         predictor = Predictor(config)
         
         # Create sidebar navigation
-        create_sidebar(model_trainer)
+        create_sidebar(None)  # No model trainer needed for navigation
         
         # Main content area
-        st.title(config.get('app', {}).get('title', 'Modern ML Web Application'))
-        st.markdown("*Build, train, and deploy machine learning models with ease*")
+        st.title("🤖 Modern ML Web Application")
+        st.markdown("*Build and deploy machine learning models in seconds*")
         
         # Progress indicator
         show_progress_indicator(st.session_state.current_step)
@@ -114,20 +96,11 @@ def main():
             page_preprocessing(data_handler)
             
         elif current_step == "train":
-            # Check if fast training is available and preferred
-            training_method = st.sidebar.radio(
-                "Training Method:",
-                ["🎯 Standard Training", "⚡ Fast Training"] if FAST_TRAINING_AVAILABLE else ["🎯 Standard Training"],
-                help="Choose between standard PyCaret training or lightning-fast alternatives"
-            )
-            
-            if training_method.startswith("⚡") and FAST_TRAINING_PAGE_AVAILABLE:
-                page_fast_training(data_handler)
-            else:
-                page_model_training(model_trainer, data_handler)
+            # Only fast training available
+            page_fast_training_only(data_handler)
                 
         elif current_step == "evaluate":
-            page_model_evaluation(visualizer)
+            page_model_evaluation_enhanced(visualizer)
             
         elif current_step == "predict":
             page_predictions(predictor)
