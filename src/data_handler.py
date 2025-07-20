@@ -1,6 +1,6 @@
 """
 Data Handler Module
-Handles data loading, preprocessing, and validation
+Handles data loading, preprocessing, and validation (No PyCaret dependency)
 """
 
 import pandas as pd
@@ -14,7 +14,7 @@ import io
 logger = logging.getLogger(__name__)
 
 class DataHandler:
-    """Handles all data operations."""
+    """Handles all data operations without PyCaret dependency."""
     
     def __init__(self, config: Dict[str, Any]):
         # Handle None config gracefully
@@ -77,21 +77,10 @@ class DataHandler:
             raise
     
     def load_sample_data(self, dataset_name: str) -> pd.DataFrame:
-        """Load sample datasets."""
+        """Load sample datasets without PyCaret."""
         try:
-            import pycaret.datasets as datasets
-            
-            sample_datasets = {
-                'titanic': datasets.get_data('titanic'),
-                'boston': datasets.get_data('boston'),
-                'diabetes': datasets.get_data('diabetes'),
-                'wine': datasets.get_data('wine')
-            }
-            
-            if dataset_name not in sample_datasets:
-                raise ValueError(f"Unknown sample dataset: {dataset_name}")
-            
-            data = sample_datasets[dataset_name]
+            # Create synthetic data instead of using PyCaret
+            data = self._create_synthetic_data(dataset_name)
             
             # Clean column names
             data.columns = self._clean_column_names(data.columns)
@@ -100,11 +89,10 @@ class DataHandler:
             
         except Exception as e:
             logger.error(f"Error loading sample data: {e}")
-            # Fallback to creating synthetic data
             return self._create_synthetic_data(dataset_name)
     
     def _create_synthetic_data(self, dataset_name: str) -> pd.DataFrame:
-        """Create synthetic data as fallback."""
+        """Create synthetic data as sample datasets."""
         np.random.seed(42)
         
         if dataset_name == 'titanic':
@@ -122,22 +110,82 @@ class DataHandler:
         
         elif dataset_name == 'boston':
             n_samples = 506
+            # Create correlated features for more realistic data
+            noise = np.random.normal(0, 1, (n_samples, 13))
+            
             data = pd.DataFrame({
-                'CRIM': np.random.exponential(3, n_samples),
-                'ZN': np.random.exponential(10, n_samples),
-                'INDUS': np.random.normal(11, 7, n_samples),
+                'CRIM': np.abs(noise[:, 0] * 3),
+                'ZN': np.abs(noise[:, 1] * 10),
+                'INDUS': noise[:, 2] * 7 + 11,
                 'CHAS': np.random.choice([0, 1], n_samples, p=[0.93, 0.07]),
-                'NOX': np.random.normal(0.55, 0.12, n_samples),
-                'RM': np.random.normal(6.3, 0.7, n_samples),
-                'AGE': np.random.normal(68, 28, n_samples),
-                'DIS': np.random.normal(3.8, 2.1, n_samples),
+                'NOX': noise[:, 3] * 0.12 + 0.55,
+                'RM': noise[:, 4] * 0.7 + 6.3,
+                'AGE': np.abs(noise[:, 5] * 28 + 68),
+                'DIS': np.abs(noise[:, 6] * 2.1 + 3.8),
                 'RAD': np.random.choice(range(1, 25), n_samples),
-                'TAX': np.random.normal(408, 169, n_samples),
-                'PTRATIO': np.random.normal(18.5, 2.2, n_samples),
-                'B': np.random.normal(356, 91, n_samples),
-                'LSTAT': np.random.normal(12.6, 7.1, n_samples),
-                'medv': np.random.normal(22.5, 9.2, n_samples)
+                'TAX': noise[:, 7] * 169 + 408,
+                'PTRATIO': noise[:, 8] * 2.2 + 18.5,
+                'B': noise[:, 9] * 91 + 356,
+                'LSTAT': np.abs(noise[:, 10] * 7.1 + 12.6)
             })
+            
+            # Create realistic target (house prices)
+            medv = (
+                25 - data['LSTAT'] * 0.5 + data['RM'] * 3 - 
+                data['CRIM'] * 0.1 + np.random.normal(0, 3, n_samples)
+            )
+            data['medv'] = np.clip(medv, 5, 50)
+        
+        elif dataset_name == 'diabetes':
+            n_samples = 442
+            # Create realistic diabetes dataset
+            features = np.random.normal(0, 1, (n_samples, 10))
+            
+            data = pd.DataFrame({
+                'age': features[:, 0],
+                'sex': features[:, 1],
+                'bmi': features[:, 2],
+                'bp': features[:, 3],
+                's1': features[:, 4],
+                's2': features[:, 5],
+                's3': features[:, 6],
+                's4': features[:, 7],
+                's5': features[:, 8],
+                's6': features[:, 9]
+            })
+            
+            # Create target (diabetes progression)
+            target = (
+                features.sum(axis=1) * 50 + 150 + 
+                np.random.normal(0, 30, n_samples)
+            )
+            data['target'] = target
+            
+        elif dataset_name == 'wine':
+            n_samples = 1599
+            # Create wine quality dataset
+            data = pd.DataFrame({
+                'fixed_acidity': np.random.normal(8.3, 1.7, n_samples),
+                'volatile_acidity': np.random.gamma(2, 0.15, n_samples),
+                'citric_acid': np.random.beta(2, 5, n_samples),
+                'residual_sugar': np.random.exponential(2.5, n_samples),
+                'chlorides': np.random.gamma(1.5, 0.05, n_samples),
+                'free_sulfur_dioxide': np.random.normal(15, 10, n_samples),
+                'total_sulfur_dioxide': np.random.normal(46, 32, n_samples),
+                'density': np.random.normal(0.997, 0.002, n_samples),
+                'pH': np.random.normal(3.3, 0.15, n_samples),
+                'sulphates': np.random.gamma(2, 0.3, n_samples),
+                'alcohol': np.random.normal(10.4, 1.1, n_samples)
+            })
+            
+            # Create quality scores (3-8)
+            quality_score = (
+                data['alcohol'] * 0.3 + 
+                data['volatile_acidity'] * -2 +
+                data['citric_acid'] * 1 +
+                np.random.normal(0, 0.5, n_samples)
+            )
+            data['quality'] = np.clip(np.round(quality_score + 6), 3, 8).astype(int)
         
         else:
             # Generic dataset
@@ -191,44 +239,69 @@ class DataHandler:
             return 'classification'
     
     def apply_preprocessing(self, data: pd.DataFrame, target_column: str, config: Dict[str, Any]) -> pd.DataFrame:
-        """Apply preprocessing steps to data."""
+        """Apply basic preprocessing steps to data."""
         processed_data = data.copy()
         
         try:
             # Handle missing values
-            if config.get('missing_strategy') == 'drop':
+            missing_strategy = config.get('missing_strategy', 'none')
+            
+            if 'drop' in missing_strategy.lower():
                 processed_data = processed_data.dropna()
-            elif config.get('missing_strategy') == 'mean':
+            elif 'mean' in missing_strategy.lower():
                 numeric_columns = processed_data.select_dtypes(include=[np.number]).columns
                 processed_data[numeric_columns] = processed_data[numeric_columns].fillna(
                     processed_data[numeric_columns].mean()
                 )
-            elif config.get('missing_strategy') == 'median':
+                # Fill categorical with mode
+                categorical_columns = processed_data.select_dtypes(include=['object', 'category']).columns
+                for col in categorical_columns:
+                    if col != target_column:
+                        mode_val = processed_data[col].mode()
+                        if len(mode_val) > 0:
+                            processed_data[col] = processed_data[col].fillna(mode_val[0])
+                            
+            elif 'median' in missing_strategy.lower():
                 numeric_columns = processed_data.select_dtypes(include=[np.number]).columns
                 processed_data[numeric_columns] = processed_data[numeric_columns].fillna(
                     processed_data[numeric_columns].median()
                 )
-            elif config.get('missing_strategy') == 'mode':
-                for column in processed_data.columns:
-                    if processed_data[column].isnull().any():
-                        mode_value = processed_data[column].mode()
-                        if len(mode_value) > 0:
-                            processed_data[column] = processed_data[column].fillna(mode_value[0])
+                # Fill categorical with mode
+                categorical_columns = processed_data.select_dtypes(include=['object', 'category']).columns
+                for col in categorical_columns:
+                    if col != target_column:
+                        mode_val = processed_data[col].mode()
+                        if len(mode_val) > 0:
+                            processed_data[col] = processed_data[col].fillna(mode_val[0])
             
-            # Handle categorical encoding
+            # Handle categorical encoding (basic)
             categorical_columns = processed_data.select_dtypes(include=['object', 'category']).columns
             categorical_columns = [col for col in categorical_columns if col != target_column]
             
-            if config.get('categorical_encoding') == 'onehot' and len(categorical_columns) > 0:
+            encoding_method = config.get('encoding_method', 'none')
+            if 'one-hot' in encoding_method.lower() and len(categorical_columns) > 0:
+                # Limit categories to prevent explosion
+                for col in categorical_columns:
+                    if processed_data[col].nunique() > 10:
+                        top_categories = processed_data[col].value_counts().head(10).index
+                        processed_data[col] = processed_data[col].apply(
+                            lambda x: x if x in top_categories else 'Other'
+                        )
+                
                 processed_data = pd.get_dummies(processed_data, columns=categorical_columns, prefix=categorical_columns)
             
-            # Feature scaling will be handled by PyCaret
+            elif 'label' in encoding_method.lower() and len(categorical_columns) > 0:
+                from sklearn.preprocessing import LabelEncoder
+                for col in categorical_columns:
+                    le = LabelEncoder()
+                    processed_data[col] = le.fit_transform(processed_data[col].astype(str))
             
             return processed_data
             
         except Exception as e:
             logger.error(f"Preprocessing error: {e}")
-            raise
+            # Return original data if preprocessing fails
+            return data
     
     def _clean_column_names(self, columns) -> list:
         """Clean column names for better compatibility."""
