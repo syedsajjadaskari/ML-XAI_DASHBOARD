@@ -1,6 +1,6 @@
 """
 Navigation and UI Utilities
-Handles navigation, progress indicators, and sidebar
+Handles navigation, progress indicators, and sidebar (Clean - No Page Names)
 """
 
 import streamlit as st
@@ -22,32 +22,12 @@ def show_progress_indicator(current_step: str):
                 st.info(f"⏳ {name}")
 
 def create_sidebar(model_trainer):
-    """Create sidebar navigation."""
+    """Create clean sidebar navigation without page names."""
     with st.sidebar:
         st.title("🤖 ML Pipeline")
         st.markdown("---")
         
-        # Current status
-        st.subheader("📊 Current Status")
-        if st.session_state.data is not None:
-            st.success(f"✅ Data loaded ({st.session_state.data.shape[0]} rows)")
-        else:
-            st.info("📁 No data loaded")
-            
-        if st.session_state.target_column:
-            st.success(f"✅ Target: {st.session_state.target_column}")
-            st.info(f"📈 Type: {st.session_state.problem_type}")
-        else:
-            st.warning("⚠️ No target selected")
-            
-        if st.session_state.trained_model is not None:
-            st.success("✅ Model trained")
-        else:
-            st.info("🎯 No model trained")
-        
-        st.markdown("---")
-        
-        # Navigation steps
+        # Navigation steps only (no page name display)
         steps = [
             ("📁", "Data Upload", "upload"),
             ("🔍", "Data Exploration", "explore"),
@@ -67,33 +47,72 @@ def create_sidebar(model_trainer):
             if step_id in ["evaluate", "predict"] and st.session_state.trained_model is None:
                 disabled = True
                 
-            if st.button(f"{icon} {label}", key=f"nav_{step_id}", use_container_width=True, disabled=disabled):
-                st.session_state.current_step = step_id
-                st.rerun()
+            # Create navigation button
+            if st.session_state.current_step == step_id:
+                # Current step - show as highlighted but not clickable
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, #00C851, #007E33);
+                    color: white;
+                    padding: 12px;
+                    border-radius: 8px;
+                    text-align: center;
+                    font-weight: bold;
+                    margin-bottom: 5px;
+                    border: 2px solid #00C851;
+                ">
+                    👉 {icon} {label}
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                # Other steps - clickable buttons
+                if st.button(f"{icon} {label}", 
+                           key=f"nav_{step_id}", 
+                           use_container_width=True, 
+                           disabled=disabled,
+                           type="secondary"):
+                    st.session_state.current_step = step_id
+                    st.rerun()
         
         st.markdown("---")
         
-        # Model management
-        st.subheader("📦 Model Management")
+        # Model management (simplified)
+        st.subheader("💾 Models")
         saved_models = get_saved_models()
         if saved_models:
-            selected_model = st.selectbox("Load Saved Model", ["None"] + saved_models)
-            if selected_model != "None" and st.button("Load Model"):
+            selected_model = st.selectbox("Load Model", [""] + saved_models, key="model_selector")
+            if selected_model and st.button("Load", use_container_width=True):
                 load_saved_model(selected_model, model_trainer)
+        else:
+            st.info("No saved models")
         
-        # App info
+        # Quick info (minimal)
         st.markdown("---")
-        st.info("""
-        **Modern ML Web App v2.0**
+        st.markdown("**Status:**")
+        if st.session_state.data is not None:
+            st.write(f"📊 {st.session_state.data.shape[0]:,} rows")
+        if st.session_state.target_column:
+            st.write(f"🎯 {st.session_state.target_column}")
+        if st.session_state.trained_model:
+            st.write("✅ Model ready")
         
-        Built with:
-        - Streamlit 1.39.0
-        - PyCaret 3.3.2
-        - Python 3.9+
+        # Hide streamlit page selector completely
+        st.markdown("""
+        <style>
+        [data-testid="stSidebarNav"] {
+            display: none;
+        }
         
-        Features:
-        - Automated ML pipeline
-        - Interactive visualizations
-        - Model comparison
-        - Real-time predictions
-        """)
+        [data-testid="stSidebarNavItems"] {
+            display: none;
+        }
+        
+        .css-1d391kg {
+            display: none;
+        }
+        
+        section[data-testid="stSidebar"] > div:first-child {
+            padding-top: 0rem;
+        }
+        </style>
+        """, unsafe_allow_html=True)
