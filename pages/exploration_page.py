@@ -1,6 +1,6 @@
 """
 Data Exploration Page
-Handles data exploration and visualization
+Handles data exploration and visualization with fixed download
 """
 
 import streamlit as st
@@ -10,19 +10,63 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
 def page_data_exploration(visualizer):
-    """Data exploration page."""
+    """Data exploration page with target selection."""
+    # Back navigation
+    col_back, col_title = st.columns([1, 4])
+    with col_back:
+        if st.button("⬅️ Back to Upload", use_container_width=True):
+            st.session_state.current_step = "upload"
+            st.rerun()
+    
     if st.session_state.data is None:
         st.warning("⚠️ Please upload data first")
         return
     
     st.header("🔍 Data Exploration")
-    st.markdown("*Explore your dataset with interactive visualizations*")
+    st.markdown("*Explore your dataset and select target variable*")
     
     data = st.session_state.data
+    
+    # Target selection section (moved here)
+    if st.session_state.target_column is None:
+        st.subheader("🎯 Target Column Selection")
+        st.info("First, select the column you want to predict (target variable)")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            target_column = st.selectbox(
+                "Select target column",
+                options=[""] + data.columns.tolist(),
+                help="Choose the column you want to predict",
+                key="target_selection"
+            )
+            
+            if target_column and target_column != "":
+                st.session_state.target_column = target_column
+                
+                # Auto-detect problem type
+                from src.data_handler import DataHandler
+                data_handler = DataHandler({})
+                problem_type = data_handler.detect_problem_type(data, target_column)
+                st.session_state.problem_type = problem_type
+                
+                st.success(f"✅ Target column set: {target_column}")
+                st.rerun()
+        
+        with col2:
+            st.info("""
+            **Choose your target column:**
+            - For **Classification**: Categories, Yes/No, etc.
+            - For **Regression**: Continuous numbers, prices, etc.
+            """)
+        
+        return  # Don't show exploration until target is selected
     
     # Dataset overview
     st.subheader("📊 Dataset Overview")
@@ -62,64 +106,79 @@ def page_data_exploration(visualizer):
                 'Non-Null': data[col].count(),
                 'Null': data[col].isnull().sum(),
                 'Unique': data[col].nunique(),
-                'Memory (KB)': data[col].memory_usage(deep=True) / 1024
+                'Memory (KB)': round(data[col].memory_usage(deep=True) / 1024, 2)
             })
         
         col_df = pd.DataFrame(col_info)
         st.dataframe(col_df, use_container_width=True, height=300)
     
     # Target variable analysis
-    if st.session_state.target_column:
-        st.subheader(f"🎯 Target Variable Analysis: {st.session_state.target_column}")
+    st.subheader(f"🎯 Target Variable Analysis: {st.session_state.target_column}")
+    
+    target_col = st.session_state.target_column
+    problem_type = st.session_state.problem_type
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if problem_type == 'classification':
+            # Target distribution for classification
+            target_counts = data[target_col].value_counts()
+            fig_target = px.bar(
+                x=target_counts.index,
+                y=target_counts.values,
+                title=f"Target Distribution: {target_col}",
+                labels={'x': target_col, 'y': 'Count'}
+            )
+            fig_target.update_traces(text=target_counts.values, textposition='auto')
+            st.plotly_chart(fig_target, use_container_width=True)
+        else:
+            # Target distribution for regression
+            fig_target = px.histogram(
+                data, 
+                x=target_col, 
+                nbins=30,
+                title=f"Target Distribution: {target_col}"
+            )
+            st.plotly_chart(fig_target, use_container_width=True)
+    
+    with col2:
+        # Target statistics
+        st.write("**Target Statistics:**")
+        if problem_type == 'classification':
+            stats = {
+                'Unique Classes': data[target_col].nunique(),
+                'Most Frequent': str(data[target_col].mode().iloc[0]) if len(data[target_col].mode()) > 0 else 'N/A',
+                'Missing Values': data[target_col].isnull().sum(),
+                'Missing %': f"{(data[target_col].isnull().sum() / len(data)) * 100:.2f}%"
+            }
+        else:
+            stats = {
+                'Mean': f"{data[target_col].mean():.4f}",
+                'Std Dev': f"{data[target_col].std():.4f}",
+                'Min': f"{data[target_col].min():.4f}",
+                'Max': f"{data[target_col].max():.4f}",
+                'Missing Values': data[target_col].isnull().sum()
+            }
         
-        target_col = st.session_state.target_column
-        problem_type = st.session_state.problem_type
+        for key, value in stats.items():
+            st.write(f"- **{key}:** {value}")
         
-        col1, col2 = st.columns(2)
+        # Option to change problem type
+        current_type = st.session_state.problem_type
+        problem_type_options = ['classification', 'regression']
+        current_index = problem_type_options.index(current_type)
         
-        with col1:
-            if problem_type == 'classification':
-                # Target distribution for classification
-                target_counts = data[target_col].value_counts()
-                fig_target = px.bar(
-                    x=target_counts.index,
-                    y=target_counts.values,
-                    title=f"Target Distribution: {target_col}",
-                    labels={'x': target_col, 'y': 'Count'}
-                )
-                fig_target.update_traces(text=target_counts.values, textposition='auto')
-                st.plotly_chart(fig_target, use_container_width=True)
-            else:
-                # Target distribution for regression
-                fig_target = px.histogram(
-                    data, 
-                    x=target_col, 
-                    nbins=30,
-                    title=f"Target Distribution: {target_col}"
-                )
-                st.plotly_chart(fig_target, use_container_width=True)
+        new_problem_type = st.selectbox(
+            "Problem type",
+            options=problem_type_options,
+            index=current_index,
+            help="Classification for categories, Regression for continuous values"
+        )
         
-        with col2:
-            # Target statistics
-            st.write("**Target Statistics:**")
-            if problem_type == 'classification':
-                stats = {
-                    'Unique Classes': data[target_col].nunique(),
-                    'Most Frequent': data[target_col].mode().iloc[0] if len(data[target_col].mode()) > 0 else 'N/A',
-                    'Missing Values': data[target_col].isnull().sum(),
-                    'Missing %': f"{(data[target_col].isnull().sum() / len(data)) * 100:.2f}%"
-                }
-            else:
-                stats = {
-                    'Mean': f"{data[target_col].mean():.4f}",
-                    'Std Dev': f"{data[target_col].std():.4f}",
-                    'Min': f"{data[target_col].min():.4f}",
-                    'Max': f"{data[target_col].max():.4f}",
-                    'Missing Values': data[target_col].isnull().sum()
-                }
-            
-            for key, value in stats.items():
-                st.write(f"- **{key}:** {value}")
+        if new_problem_type != current_type:
+            st.session_state.problem_type = new_problem_type
+            st.rerun()
     
     # Missing data analysis
     missing_data = data.isnull().sum()
@@ -151,8 +210,6 @@ def page_data_exploration(visualizer):
             with col2:
                 st.write("**Missing Data Details:**")
                 st.dataframe(missing_df, use_container_width=True)
-        else:
-            st.success("🎉 No missing data found!")
     else:
         st.success("🎉 No missing data found!")
     
@@ -234,16 +291,17 @@ def page_data_exploration(visualizer):
                 # Statistics
                 st.write(f"**Statistics for {selected_categorical}:**")
                 unique_count = data[selected_categorical].nunique()
-                most_frequent = data[selected_categorical].mode().iloc[0] if len(data[selected_categorical].mode()) > 0 else 'N/A'
+                most_frequent = str(data[selected_categorical].mode().iloc[0]) if len(data[selected_categorical].mode()) > 0 else 'N/A'
                 missing_count = data[selected_categorical].isnull().sum()
                 
                 st.metric("Unique Values", unique_count)
-                st.metric("Most Frequent", str(most_frequent))
+                st.metric("Most Frequent", str(most_frequent)[:20] + "..." if len(str(most_frequent)) > 20 else str(most_frequent))
                 st.metric("Missing Values", missing_count)
                 
                 if unique_count <= 20:
                     st.write("**All unique values:**")
-                    st.write(data[selected_categorical].value_counts().to_dict())
+                    for val, count in data[selected_categorical].value_counts().items():
+                        st.write(f"- {val}: {count}")
     
     # Correlation analysis
     if len(numeric_cols) > 1:
@@ -289,34 +347,6 @@ def page_data_exploration(visualizer):
                     labels={'x': 'Absolute Correlation', 'y': 'Features'}
                 )
                 st.plotly_chart(fig_target_corr, use_container_width=True)
-    
-    # Feature relationships (scatter plots)
-    if len(numeric_cols) >= 2:
-        st.subheader("📊 Feature Relationships")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            x_feature = st.selectbox("Select X feature:", numeric_cols, key="scatter_x")
-        with col2:
-            y_feature = st.selectbox("Select Y feature:", numeric_cols, key="scatter_y", 
-                                   index=1 if len(numeric_cols) > 1 else 0)
-        
-        if x_feature != y_feature:
-            # Color by target if categorical
-            color_col = None
-            if (st.session_state.target_column and 
-                st.session_state.problem_type == 'classification'):
-                color_col = st.session_state.target_column
-            
-            fig_scatter = px.scatter(
-                data,
-                x=x_feature,
-                y=y_feature,
-                color=color_col,
-                title=f"{x_feature} vs {y_feature}",
-                opacity=0.6
-            )
-            st.plotly_chart(fig_scatter, use_container_width=True)
     
     # Data quality summary
     st.subheader("✅ Data Quality Summary")
@@ -379,30 +409,91 @@ def page_data_exploration(visualizer):
     
     st.dataframe(sample_data, use_container_width=True)
     
-    # Export option
-    if st.button("📥 Download Data Summary Report"):
-        # Create summary report
-        summary_report = {
-            'Dataset Overview': {
-                'Total Rows': len(data),
-                'Total Columns': len(data.columns),
-                'Missing Data %': f"{missing_pct:.2f}%",
-                'Memory Usage (MB)': f"{memory_mb:.2f}"
-            },
-            'Data Types': dtype_counts.to_dict(),
-            'Missing Data': missing_df.to_dict('records') if 'missing_df' in locals() else "No missing data",
-            'Quality Issues': quality_issues if quality_issues else "No issues detected"
-        }
-        
-        import json
-        report_json = json.dumps(summary_report, indent=2, default=str)
-        
-        st.download_button(
-            label="📥 Download JSON Report",
-            data=report_json,
-            file_name="data_exploration_report.json",
-            mime="application/json"
-        )
+    # Export option - FIXED
+    if st.button("📥 Generate Data Summary Report", use_container_width=True):
+        try:
+            # Create comprehensive summary report with proper type conversion
+            summary_report = {
+                'Dataset Overview': {
+                    'Total Rows': int(len(data)),
+                    'Total Columns': int(len(data.columns)),
+                    'Missing Data Percentage': float(missing_pct),
+                    'Memory Usage (MB)': float(memory_mb),
+                    'Target Column': str(st.session_state.target_column) if st.session_state.target_column else "Not selected",
+                    'Problem Type': str(st.session_state.problem_type) if st.session_state.problem_type else "Not determined"
+                },
+                'Data Types': {str(k): int(v) for k, v in dtype_counts.to_dict().items()},
+                'Numeric Features': int(len(numeric_cols)),
+                'Categorical Features': int(len(categorical_cols))
+            }
+            
+            # Convert column details safely
+            if col_info:
+                summary_report['Column Details'] = []
+                for item in col_info:
+                    safe_item = {}
+                    for key, value in item.items():
+                        if pd.isna(value):
+                            safe_item[str(key)] = None
+                        elif isinstance(value, (np.integer, np.floating)):
+                            safe_item[str(key)] = float(value)
+                        else:
+                            safe_item[str(key)] = str(value)
+                    summary_report['Column Details'].append(safe_item)
+            
+            # Add missing data analysis safely
+            if 'missing_df' in locals() and len(missing_df) > 0:
+                summary_report['Missing Data Analysis'] = []
+                for _, row in missing_df.iterrows():
+                    safe_row = {
+                        'Column': str(row['Column']),
+                        'Missing Count': int(row['Missing Count']),
+                        'Missing Percentage': float(row['Missing %'])
+                    }
+                    summary_report['Missing Data Analysis'].append(safe_row)
+            else:
+                summary_report['Missing Data Analysis'] = "No missing data"
+            
+            # Add quality issues safely
+            summary_report['Quality Issues'] = [str(issue) for issue in quality_issues] if quality_issues else ["No issues detected"]
+            
+            # Convert to JSON string with safe serialization
+            def safe_json_serializer(obj):
+                if isinstance(obj, (np.integer, np.floating)):
+                    return float(obj)
+                elif isinstance(obj, np.ndarray):
+                    return obj.tolist()
+                elif pd.isna(obj):
+                    return None
+                else:
+                    return str(obj)
+            
+            report_json = json.dumps(summary_report, indent=2, default=safe_json_serializer)
+            
+            # Create download button
+            st.download_button(
+                label="📥 Download JSON Report",
+                data=report_json,
+                file_name=f"data_exploration_report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json",
+                use_container_width=True
+            )
+            
+            st.success("✅ Report generated successfully!")
+            
+        except Exception as e:
+            st.error(f"❌ Error generating report: {str(e)}")
+            logger.error(f"Report generation error: {e}")
+            
+            # Show detailed error for debugging
+            with st.expander("🔧 Error Details"):
+                st.code(str(e))
+                st.write("**Data types in report:**")
+                try:
+                    st.write(f"dtype_counts type: {type(dtype_counts)}")
+                    st.write(f"dtype_counts values: {dtype_counts}")
+                except:
+                    st.write("Could not display dtype_counts")
     
     # Next step
     if st.button("⚙️ Proceed to Data Preprocessing", type="primary", use_container_width=True):
