@@ -1,6 +1,6 @@
 """
 Data Upload Page
-Handles file upload, data preview, and target selection
+Handles file upload and data preview with reset functionality
 """
 
 import streamlit as st
@@ -10,10 +10,32 @@ import logging
 logger = logging.getLogger(__name__)
 
 def page_data_upload(data_handler):
-    """Data upload page."""
+    """Data upload page with reset functionality."""
     st.header("📁 Data Upload")
     
-    # File upload
+    # Reset button at the top
+    col_reset, col_spacer = st.columns([1, 4])
+    with col_reset:
+        if st.button("🔄 Reset All Data", use_container_width=True, type="secondary"):
+            # Clear all session state data
+            keys_to_clear = ['data', 'target_column', 'problem_type', 'preview_data', 'preprocessing_config', 
+                           'trained_model', 'fast_trainer', 'fast_training_results', 'columns_to_remove']
+            for key in keys_to_clear:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.success("✅ All data cleared!")
+            st.rerun()
+    
+    # Show current data status if exists
+    if st.session_state.data is not None:
+        st.info(f"📊 Current data: {st.session_state.data.shape[0]:,} rows, {st.session_state.data.shape[1]} columns")
+        
+        # Quick preview of current data
+        with st.expander("👀 Current Data Preview"):
+            st.dataframe(st.session_state.data.head(), use_container_width=True)
+    
+    # File upload section
+    st.subheader("📂 Upload New File")
     uploaded_file = st.file_uploader(
         "Choose a file",
         type=['csv', 'xlsx', 'xls', 'parquet'],
@@ -26,119 +48,139 @@ def page_data_upload(data_handler):
             with st.spinner("Loading data..."):
                 data = data_handler.load_data(uploaded_file)
                 st.session_state.data = data
+                # Clear related session state when new data is loaded
+                st.session_state.target_column = None
+                st.session_state.problem_type = None
             
-            st.success(f"✅ Data loaded successfully! Shape: {data.shape}")
-            
-            # Display basic info
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Rows", f"{data.shape[0]:,}")
-            with col2:
-                st.metric("Columns", f"{data.shape[1]:,}")
-            with col3:
-                missing_pct = (data.isnull().sum().sum() / (data.shape[0] * data.shape[1])) * 100
-                st.metric("Missing %", f"{missing_pct:.1f}%")
-            
-            # Data preview
-            st.subheader("📋 Data Preview")
-            st.dataframe(data.head(100), use_container_width=True)
-            
-            # Column information
-            st.subheader("📊 Column Information")
-            col_info = data_handler.get_column_info(data)
-            st.dataframe(col_info, use_container_width=True)
+            st.success(f"✅ Data loaded successfully!")
+            _show_data_info_and_preview(data)
             
         except Exception as e:
             st.error(f"❌ Error loading data: {str(e)}")
             logger.error(f"Data loading error: {e}")
             return
     
-    # Target selection - Show this section if we have data
-    if st.session_state.data is not None:
-        st.subheader("🎯 Target Column Selection")
-        st.info("Select the column you want to predict (target variable)")
+    # Sample data section
+    elif st.session_state.data is None:  # Only show if no data loaded
+        st.markdown("---")
+        st.subheader("🎲 Try Sample Data")
+        st.info("👆 Upload your dataset or try sample data below")
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            target_column = st.selectbox(
-                "Select target column",
-                options=[""] + st.session_state.data.columns.tolist(),
-                index=0 if st.session_state.target_column is None else st.session_state.data.columns.tolist().index(st.session_state.target_column) + 1,
-                help="Choose the column you want to predict",
-                key="target_selection"
-            )
-            
-            if target_column and target_column != "":
-                st.session_state.target_column = target_column
-                
-                # Auto-detect problem type
-                problem_type = data_handler.detect_problem_type(st.session_state.data, target_column)
-                st.session_state.problem_type = problem_type
-                
-                st.success(f"✅ Target column set: {target_column}")
-        
-        with col2:
-            if st.session_state.target_column:
-                # Show problem type
-                problem_type_options = ['classification', 'regression']
-                current_index = problem_type_options.index(st.session_state.problem_type) if st.session_state.problem_type in problem_type_options else 0
-                
-                selected_problem_type = st.selectbox(
-                    "Problem type",
-                    options=problem_type_options,
-                    index=current_index,
-                    help="Classification for categories, Regression for continuous values",
-                    key="problem_type_selection"
-                )
-                st.session_state.problem_type = selected_problem_type
-                
-                # Show target column info
-                target_info = st.session_state.data[st.session_state.target_column]
-                st.write("**Target Column Info:**")
-                st.write(f"- Type: {target_info.dtype}")
-                st.write(f"- Unique values: {target_info.nunique()}")
-                st.write(f"- Missing values: {target_info.isnull().sum()}")
-                
-                if st.session_state.problem_type == 'classification':
-                    st.write(f"- Classes: {list(target_info.unique())[:10]}")  # Show first 10
-                else:
-                    st.write(f"- Range: {target_info.min():.2f} to {target_info.max():.2f}")
-        
-        # Next step button - only show if target is selected
-        if st.session_state.target_column:
-            if st.button("🔍 Proceed to Data Exploration", type="primary", use_container_width=True):
-                st.session_state.current_step = "explore"
-                st.rerun()
-        else:
-            st.warning("⚠️ Please select a target column to proceed")
-                
-    else:
-        # Sample data option
-        st.info("👆 Upload your dataset to get started")
-        
-        st.subheader("🎲 Or Try Sample Data")
         sample_datasets = {
-            "Titanic (Classification)": ("titanic", "Survived"),
-            "Boston Housing (Regression)": ("boston", "medv"),
-            "Diabetes (Regression)": ("diabetes", "target"),
-            "Wine Quality (Classification)": ("wine", "quality")
+            "Titanic (Classification)": {
+                "name": "titanic", 
+                "target": "Survived",
+                "description": "Predict passenger survival on Titanic"
+            },
+            "Boston Housing (Regression)": {
+                "name": "boston", 
+                "target": "medv",
+                "description": "Predict house prices in Boston"
+            },
+            "Diabetes (Regression)": {
+                "name": "diabetes", 
+                "target": "target",
+                "description": "Predict diabetes progression"
+            },
+            "Wine Quality (Classification)": {
+                "name": "wine", 
+                "target": "quality",
+                "description": "Predict wine quality scores"
+            }
         }
         
-        selected_sample = st.selectbox("Choose sample dataset", list(sample_datasets.keys()))
+        # Sample dataset selection with descriptions
+        col1, col2 = st.columns([2, 1])
         
-        if st.button("Load Sample Data"):
-            try:
-                dataset_name, target_col = sample_datasets[selected_sample]
-                data = data_handler.load_sample_data(dataset_name)
-                st.session_state.data = data
-                
-                # Auto-set target column for sample data
-                if target_col in data.columns:
-                    st.session_state.target_column = target_col
-                    st.session_state.problem_type = data_handler.detect_problem_type(data, target_col)
-                
-                st.success("✅ Sample data loaded!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ Error loading sample data: {str(e)}")
+        with col1:
+            selected_sample = st.selectbox(
+                "Choose sample dataset:", 
+                list(sample_datasets.keys()),
+                help="Select a sample dataset to explore the application"
+            )
+            
+            # Show description
+            if selected_sample:
+                description = sample_datasets[selected_sample]["description"]
+                st.info(f"📖 {description}")
+        
+        with col2:
+            if st.button("Load Sample Data", type="primary", use_container_width=True):
+                try:
+                    dataset_info = sample_datasets[selected_sample]
+                    dataset_name = dataset_info["name"]
+                    target_col = dataset_info["target"]
+                    
+                    with st.spinner(f"Loading {selected_sample}..."):
+                        data = data_handler.load_sample_data(dataset_name)
+                        st.session_state.data = data
+                        
+                        # Auto-set target column for sample data
+                        if target_col in data.columns:
+                            st.session_state.target_column = target_col
+                            st.session_state.problem_type = data_handler.detect_problem_type(data, target_col)
+                    
+                    st.success(f"✅ {selected_sample} loaded successfully!")
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"❌ Error loading sample data: {str(e)}")
+                    logger.error(f"Sample data loading error: {e}")
+    
+    # Show data information and navigation if data exists
+    if st.session_state.data is not None:
+        _show_data_info_and_preview(st.session_state.data)
+        
+        # Navigation button
+        st.markdown("---")
+        if st.button("🔍 Proceed to Data Exploration", type="primary", use_container_width=True):
+            st.session_state.current_step = "explore"
+            st.rerun()
+
+def _show_data_info_and_preview(data):
+    """Show data information and preview."""
+    st.markdown("---")
+    st.subheader("📊 Dataset Information")
+    
+    # Basic metrics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Rows", f"{data.shape[0]:,}")
+    with col2:
+        st.metric("Columns", f"{data.shape[1]:,}")
+    with col3:
+        missing_pct = (data.isnull().sum().sum() / (data.shape[0] * data.shape[1])) * 100
+        st.metric("Missing %", f"{missing_pct:.1f}%")
+    with col4:
+        memory_mb = data.memory_usage(deep=True).sum() / 1024 / 1024
+        st.metric("Memory", f"{memory_mb:.1f} MB")
+    
+    # Data preview
+    st.subheader("📋 Data Preview")
+    st.dataframe(data.head(10), use_container_width=True)
+    
+    # Column information
+    st.subheader("📋 Column Details")
+    try:
+        from src.data_handler import DataHandler
+        data_handler = DataHandler({})
+        col_info = data_handler.get_column_info(data)
+        st.dataframe(col_info, use_container_width=True)
+    except Exception as e:
+        st.warning(f"Could not generate column info: {e}")
+        
+        # Fallback: simple column info
+        col_info_simple = pd.DataFrame({
+            'Column': data.columns,
+            'Type': data.dtypes.astype(str),
+            'Non-Null': data.count(),
+            'Null': data.isnull().sum(),
+            'Unique': data.nunique()
+        })
+        st.dataframe(col_info_simple, use_container_width=True)
+    
+    # Target column suggestion if not set
+    if st.session_state.target_column is None:
+        st.info("💡 **Next Step:** Go to Data Exploration to select your target column (what you want to predict)")
+    else:
+        st.success(f"🎯 **Target Column:** {st.session_state.target_column} ({st.session_state.problem_type})")
