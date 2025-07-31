@@ -1,132 +1,43 @@
-# Core ML Libraries (Fast Training)
+# Core ML Libraries (Fast Training) - UNCHANGED
 streamlit==1.39.0
 pandas==2.0.3
 numpy==1.24.3
 scikit-learn==1.3.0
 
-# Visualization
+# Visualization - UNCHANGED
 plotly==5.17.0
 matplotlib==3.7.2
 seaborn==0.12.2
 
-# Data Processing
+# Data Processing - UNCHANGED
 openpyxl==3.1.2
 xlrd==2.0.1
 pyarrow==13.0.0
 
-# Fast ML Libraries (REQUIRED for lightning speed)
+# Fast ML Libraries - UNCHANGED
 lightgbm>=4.1.0
 xgboost>=1.7.6
 catboost>=1.2.2
 
-# Universal XAI Libraries (Model-Agnostic Explainability)
-lime>=0.2.0.1                    # Local Interpretable Model-agnostic Explanations
-eli5>=0.13.0                     # Model introspection and explanation
-shap>=0.42.1                     # SHapley Additive exPlanations (optional)
+# XAI Libraries - SIMPLIFIED (No heavy dependencies)
+# NO LIME - too CPU intensive
+# NO ELI5 - not essential
+# NO SHAP - too heavy for simple use
+# Only use built-in scikit-learn inspection (already included above)
 
-# Advanced Model Analysis
-scipy>=1.10.0                    # Statistical functions for analysis
-statsmodels>=0.14.0              # Statistical modeling and tests
+# AutoML - UNCHANGED
+FLAML==2.3.5
 
-# Ultra-Fast AutoML (OPTIONAL - install for maximum speed)
-FLAML==2.3.5                     # Microsoft FLAML AutoML
-
-# Additional Fast Libraries
-joblib>=1.3.0                    # Model serialization
-optuna>=3.4.0                    # Hyperparameter optimization
-
-# Utilities
+# Other Libraries - UNCHANGED
+joblib>=1.3.0
+optuna>=3.4.0
 PyYAML==6.0.1
 python-dateutil==2.8.2
 Pillow==10.0.1
 requests==2.31.0
-
-# System
 psutil==5.9.6
 
-# Development Tools (Optional)
+# Development Tools - UNCHANGED
 pytest==7.4.2
 black==23.9.1
 flake8==6.1.0
-
-# Installation Instructions:
-# 
-# 1. Universal XAI Setup (Recommended):
-#    pip install -r requirements.txt
-#
-# 2. For Ultra-Fast FLAML AutoML:
-#    pip install flaml[automl]
-#
-# 3. For H2O AutoML (large datasets):
-#    pip install h2o
-#
-# 4. For GPU acceleration (if you have GPU):
-#    pip install lightgbm[gpu] xgboost[gpu]
-#
-# 5. Optional advanced XAI libraries:
-#    pip install interpret              # Microsoft InterpretML
-#    pip install alibi                  # Seldon Alibi explanations
-#    pip install anchor-exp             # Anchor explanations
-
-# XAI Method Compatibility Matrix:
-# =====================================
-# Method                    | All Models | Speed  | Quality
-# =====================================
-# Permutation Importance   | ✅ Yes     | ⚡ Fast | 🌟 High
-# Feature Statistics        | ✅ Yes     | ⚡ Fast | 🌟 High  
-# LIME Explanations         | ✅ Yes     | 🐌 Slow | 🌟 High
-# ELI5 Analysis            | ✅ Yes     | ⚡ Fast | ⭐ Med
-# Surrogate Models         | ✅ Yes     | ⚡ Fast | ⭐ Med
-# Partial Dependence       | ✅ Yes     | 🔄 Med  | 🌟 High
-# Counterfactual Analysis  | ✅ Yes     | 🔄 Med  | ⭐ Med
-# Feature Interactions     | ✅ Yes     | ⚡ Fast | ⭐ Med
-# SHAP (Optional)          | 🔶 Most    | 🐌 Slow | 🌟 High
-
-# Model Type Specific Features:
-# =============================
-# Tree-based (RF, XGB, LGB):
-#   ✅ Built-in feature importance
-#   ✅ Tree visualization
-#   ✅ Fast SHAP TreeExplainer
-#   ✅ Decision path analysis
-#
-# Linear Models (LR, Ridge, Lasso):
-#   ✅ Coefficient analysis  
-#   ✅ Fast SHAP LinearExplainer
-#   ✅ Feature sensitivity
-#   ✅ Regularization insights
-#
-# Ensemble Models:
-#   ✅ Component model analysis
-#   ✅ Voting/averaging insights
-#   ✅ Model agreement analysis
-#   ✅ Uncertainty quantification
-#
-# Neural Networks (MLP):
-#   ✅ Layer-wise analysis
-#   ✅ Activation patterns
-#   ✅ Universal approximation insights
-#   ⚠️  Requires specialized tools for deep analysis
-
-# Performance Optimization Tips:
-# ==============================
-# 1. Use sample_size parameter to limit analysis data
-# 2. Permutation importance: Start with n_repeats=3
-# 3. LIME: Use background sample of 100-500 instances  
-# 4. Feature analysis: Focus on top 10-15 features
-# 5. Enable n_jobs=-1 for parallel processing
-# 6. Cache results for repeated analysis
-
-# Troubleshooting:
-# ===============
-# Issue: LIME taking too long
-# Solution: Reduce background sample size to 100-200
-#
-# Issue: Memory errors with large datasets  
-# Solution: Use sample_size parameter, start with 500 samples
-#
-# Issue: Feature names not showing
-# Solution: Ensure feature_names are properly set in trainer
-#
-# Issue: Inconsistent explanations
-# Solution: Increase n_repeats in permutation importance
