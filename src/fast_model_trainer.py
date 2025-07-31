@@ -1,7 +1,6 @@
 """
-Fast Model Trainer
+Fast Model Trainer - Updated with proper test data storage
 Lightning-fast ML training using scikit-learn with optimized pipelines
-Much faster alternative to PyCaret
 """
 
 import pandas as pd
@@ -56,10 +55,17 @@ class FastModelTrainer:
         self.X_test = None
         self.y_train = None
         self.y_test = None
+        self.X_train_processed = None
+        self.X_test_processed = None
         self.preprocessor = None
         self.trained_models = {}
         self.best_model = None
         self.feature_names = None
+        self.original_feature_names = None
+        self.label_encoder = None
+        
+        # Store evaluation data for later use
+        self.evaluation_data = None
         
     def setup_environment(self, 
                          data: pd.DataFrame, 
@@ -68,18 +74,20 @@ class FastModelTrainer:
                          preprocessing_config: Dict[str, Any],
                          test_size: float = 0.2,
                          random_state: int = 42) -> bool:
-        """Setup fast training environment."""
+        """Setup fast training environment with proper data storage."""
         try:
             start_time = time.time()
             logger.info("Setting up Fast ML environment...")
             
             self.problem_type = problem_type
+            self.target_column = target
             
             # Separate features and target
             X = data.drop(columns=[target])
             y = data[target]
             
-            # Store feature names
+            # Store original feature names
+            self.original_feature_names = X.columns.tolist()
             self.feature_names = X.columns.tolist()
             
             # Train-test split
@@ -95,11 +103,30 @@ class FastModelTrainer:
             self.X_train_processed = self.preprocessor.fit_transform(self.X_train)
             self.X_test_processed = self.preprocessor.transform(self.X_test)
             
+            # Store original target values for evaluation
+            self.y_train_original = self.y_train.copy()
+            self.y_test_original = self.y_test.copy()
+            
             # Encode target for classification
             if problem_type == 'classification' and y.dtype == 'object':
                 self.label_encoder = LabelEncoder()
                 self.y_train = self.label_encoder.fit_transform(self.y_train)
                 self.y_test = self.label_encoder.transform(self.y_test)
+            
+            # Store evaluation data structure
+            self.evaluation_data = {
+                'X_test_original': self.X_test.copy(),
+                'X_test_processed': self.X_test_processed.copy(),
+                'y_test_original': self.y_test_original.copy(),
+                'y_test_encoded': self.y_test.copy(),
+                'X_train_processed': self.X_train_processed.copy(),
+                'y_train_encoded': self.y_train.copy(),
+                'feature_names': self.original_feature_names,
+                'preprocessor': self.preprocessor,
+                'label_encoder': self.label_encoder,
+                'problem_type': self.problem_type,
+                'target_column': self.target_column
+            }
             
             self.setup_complete = True
             setup_time = time.time() - start_time
@@ -279,30 +306,76 @@ class FastModelTrainer:
         self.trained_models[model_name] = model
         return model
     
-    def evaluate_model(self, model) -> Dict[str, float]:
-        """Fast model evaluation."""
+    def get_evaluation_predictions(self, model) -> Dict[str, Any]:
+        """Get predictions and probabilities for evaluation."""
         try:
-            predictions = model.predict(self.X_test_processed)
+            # Get predictions
+            y_pred = model.predict(self.X_test_processed)
+            
+            # Get probabilities if available
+            y_proba = None
+            if hasattr(model, 'predict_proba'):
+                y_proba = model.predict_proba(self.X_test_processed)
+            
+            # Decode predictions if classification with label encoding
+            y_pred_decoded = y_pred.copy()
+            y_test_decoded = self.y_test.copy()
+            
+            if self.problem_type == 'classification' and self.label_encoder is not None:
+                y_pred_decoded = self.label_encoder.inverse_transform(y_pred)
+                y_test_decoded = self.label_encoder.inverse_transform(self.y_test)
+            
+            return {
+                'y_test': y_test_decoded,
+                'y_pred': y_pred_decoded,
+                'y_test_encoded': self.y_test,
+                'y_pred_encoded': y_pred,
+                'y_proba': y_proba,
+                'X_test': self.X_test,
+                'X_test_processed': self.X_test_processed,
+                'feature_names': self.original_feature_names,
+                'model_name': type(model).__name__
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting evaluation predictions: {e}")
+            raise
+    
+    def evaluate_model(self, model) -> Dict[str, float]:
+        """Fast model evaluation with comprehensive metrics."""
+        try:
+            predictions_data = self.get_evaluation_predictions(model)
+            y_test = predictions_data['y_test_encoded']
+            y_pred = predictions_data['y_pred_encoded']
             
             if self.problem_type == 'classification':
                 # Get probabilities if available
                 try:
-                    probabilities = model.predict_proba(self.X_test_processed)
+                    y_proba = predictions_data['y_proba']
+                    if y_proba is not None and len(np.unique(y_test)) == 2:
+                        from sklearn.metrics import roc_auc_score
+                        auc_score = roc_auc_score(y_test, y_proba[:, 1])
+                    else:
+                        auc_score = None
                 except:
-                    probabilities = None
+                    auc_score = None
                 
                 metrics = {
-                    'accuracy': accuracy_score(self.y_test, predictions),
-                    'precision': precision_score(self.y_test, predictions, average='weighted', zero_division=0),
-                    'recall': recall_score(self.y_test, predictions, average='weighted', zero_division=0),
-                    'f1': f1_score(self.y_test, predictions, average='weighted', zero_division=0)
+                    'accuracy': accuracy_score(y_test, y_pred),
+                    'precision': precision_score(y_test, y_pred, average='weighted', zero_division=0),
+                    'recall': recall_score(y_test, y_pred, average='weighted', zero_division=0),
+                    'f1': f1_score(y_test, y_pred, average='weighted', zero_division=0)
                 }
+                
+                if auc_score is not None:
+                    metrics['auc'] = auc_score
+                    
             else:
                 metrics = {
-                    'mae': mean_absolute_error(self.y_test, predictions),
-                    'mse': mean_squared_error(self.y_test, predictions),
-                    'rmse': np.sqrt(mean_squared_error(self.y_test, predictions)),
-                    'r2': r2_score(self.y_test, predictions)
+                    'mae': mean_absolute_error(y_test, y_pred),
+                    'mse': mean_squared_error(y_test, y_pred),
+                    'rmse': np.sqrt(mean_squared_error(y_test, y_pred)),
+                    'r2': r2_score(y_test, y_pred)
                 }
             
             return metrics
@@ -320,7 +393,7 @@ class FastModelTrainer:
             
             # Decode predictions if classification with label encoding
             if (self.problem_type == 'classification' and 
-                hasattr(self, 'label_encoder')):
+                hasattr(self, 'label_encoder') and self.label_encoder is not None):
                 predictions = self.label_encoder.inverse_transform(predictions)
             
             return predictions
@@ -366,39 +439,19 @@ class FastModelTrainer:
     def _get_processed_feature_names(self) -> List[str]:
         """Get feature names after preprocessing."""
         try:
-            # This is a simplified version - in practice, you'd need to 
-            # extract the actual feature names from the ColumnTransformer
-            numeric_features = len([col for col in self.feature_names 
-                                  if col in self.X_train.select_dtypes(include=[np.number]).columns])
+            # Get feature names from the preprocessor
+            if hasattr(self.preprocessor, 'get_feature_names_out'):
+                feature_names = self.preprocessor.get_feature_names_out()
+            else:
+                # Fallback: use original feature names
+                feature_names = self.original_feature_names
             
-            # Approximate feature names (simplified)
-            feature_names = [f'feature_{i}' for i in range(self.X_train_processed.shape[1])]
-            
-            return feature_names
+            return list(feature_names)
             
         except:
-            return [f'feature_{i}' for i in range(self.X_train_processed.shape[1])]
-    
-    def hyperparameter_tuning_fast(self, model, param_grid: Dict, n_iter: int = 10, cv: int = 3):
-        """Fast hyperparameter tuning using RandomizedSearchCV."""
-        if not self.setup_complete:
-            raise ValueError("Environment not setup")
-        
-        start_time = time.time()
-        logger.info(f"Fast hyperparameter tuning with {n_iter} iterations...")
-        
-        # Use RandomizedSearchCV for speed
-        search = RandomizedSearchCV(
-            model, param_grid, n_iter=n_iter, cv=cv, 
-            random_state=42, n_jobs=-1, verbose=0
-        )
-        
-        search.fit(self.X_train_processed, self.y_train)
-        
-        tuning_time = time.time() - start_time
-        logger.info(f"Hyperparameter tuning completed in {tuning_time:.2f} seconds")
-        
-        return search.best_estimator_
+            # Last resort: generate generic names
+            n_features = self.X_train_processed.shape[1] if hasattr(self, 'X_train_processed') else len(self.original_feature_names)
+            return [f'feature_{i}' for i in range(n_features)]
     
     def get_available_models(self) -> Dict[str, str]:
         """Get available model names and descriptions."""
@@ -431,24 +484,3 @@ class FastModelTrainer:
             base_models['xgb'] = 'XGBoost (Fast)'
         
         return base_models
-    
-    def create_ensemble_fast(self, models: List[Any]) -> Any:
-        """Create fast ensemble model."""
-        from sklearn.ensemble import VotingClassifier, VotingRegressor
-        
-        try:
-            estimators = [(f'model_{i}', model) for i, model in enumerate(models)]
-            
-            if self.problem_type == 'classification':
-                ensemble = VotingClassifier(estimators=estimators, voting='soft')
-            else:
-                ensemble = VotingRegressor(estimators=estimators)
-            
-            # Train ensemble
-            ensemble.fit(self.X_train_processed, self.y_train)
-            
-            return ensemble
-            
-        except Exception as e:
-            logger.error(f"Ensemble creation error: {e}")
-            raise
