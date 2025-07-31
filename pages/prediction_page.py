@@ -1,6 +1,6 @@
 """
-Enhanced Prediction Page
-Handles single and batch predictions with separate beautiful SHAP visualizations
+Simplified Prediction Page - SHAP Removed
+Handles single and batch predictions only
 """
 
 import streamlit as st
@@ -10,19 +10,11 @@ from datetime import datetime
 import logging
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-
-# SHAP imports with error handling
-try:
-    import shap
-    SHAP_AVAILABLE = True
-except ImportError:
-    SHAP_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
 def page_predictions(predictor):
-    """Enhanced predictions page with separate SHAP section."""
+    """Simplified predictions page - Single and Batch only."""
     # Back navigation
     col_back, col_title = st.columns([1, 4])
     with col_back:
@@ -34,8 +26,8 @@ def page_predictions(predictor):
         st.warning("⚠️ Please train a model first")
         return
     
-    st.header("🔮 Model Predictions & Analysis")
-    st.markdown("*Make predictions and understand model behavior with SHAP*")
+    st.header("🔮 Model Predictions")
+    st.markdown("*Make single and batch predictions with your trained model*")
     
     # Show model info
     with st.expander("📋 Model Information"):
@@ -49,8 +41,8 @@ def page_predictions(predictor):
             if 'training_time' in results:
                 st.write(f"**Training Time:** {results['training_time']:.2f} seconds")
     
-    # Main tabs for different sections
-    tab1, tab2, tab3 = st.tabs(["🎯 Single Prediction", "📊 Batch Predictions", "🧠 SHAP Analysis"])
+    # Main tabs - Only Single and Batch predictions
+    tab1, tab2 = st.tabs(["🎯 Single Prediction", "📊 Batch Predictions"])
     
     with tab1:
         _handle_single_prediction(predictor)
@@ -58,8 +50,11 @@ def page_predictions(predictor):
     with tab2:
         _handle_batch_prediction(predictor)
     
-    with tab3:
-        _handle_shap_analysis()
+    # Next step button
+    st.markdown("---")
+    if st.button("🧠 Proceed to XAI Analysis", type="primary", use_container_width=True):
+        st.session_state.current_step = "xai"
+        st.rerun()
 
 def _handle_single_prediction(predictor):
     """Handle single record prediction."""
@@ -132,24 +127,59 @@ def _handle_single_prediction(predictor):
                     input_df
                 )
                 
-                # Store for SHAP analysis
-                st.session_state.prediction_input = input_df
-                st.session_state.latest_prediction = prediction
-                
-                # Display result
-                st.success("✅ Prediction completed!")
+                # Display result with enhanced styling
+                st.markdown("---")
+                st.markdown("### 🎯 Prediction Result")
                 
                 col1, col2 = st.columns(2)
                 with col1:
+                    # Main prediction result
                     if isinstance(prediction, (int, float)):
                         if st.session_state.problem_type == "regression":
-                            st.metric("🎯 Predicted Value", f"{prediction:.4f}")
+                            st.markdown(f"""
+                            <div style="
+                                background: linear-gradient(135deg, #4CAF50, #45a049);
+                                color: white;
+                                padding: 20px;
+                                border-radius: 10px;
+                                text-align: center;
+                                margin: 10px 0;
+                            ">
+                                <h2 style="margin: 0;">🎯 Predicted Value</h2>
+                                <h1 style="margin: 10px 0; font-size: 2.5em;">{prediction:.4f}</h1>
+                            </div>
+                            """, unsafe_allow_html=True)
                         else:
-                            st.metric("🎯 Predicted Class", str(prediction))
+                            st.markdown(f"""
+                            <div style="
+                                background: linear-gradient(135deg, #2196F3, #1976D2);
+                                color: white;
+                                padding: 20px;
+                                border-radius: 10px;
+                                text-align: center;
+                                margin: 10px 0;
+                            ">
+                                <h2 style="margin: 0;">🎯 Predicted Class</h2>
+                                <h1 style="margin: 10px 0; font-size: 2.5em;">{str(prediction)}</h1>
+                            </div>
+                            """, unsafe_allow_html=True)
                     else:
-                        st.metric("🎯 Predicted Value", str(prediction))
+                        st.markdown(f"""
+                        <div style="
+                            background: linear-gradient(135deg, #FF9800, #F57C00);
+                            color: white;
+                            padding: 20px;
+                            border-radius: 10px;
+                            text-align: center;
+                            margin: 10px 0;
+                        ">
+                            <h2 style="margin: 0;">🎯 Prediction</h2>
+                            <h1 style="margin: 10px 0; font-size: 2.5em;">{str(prediction)}</h1>
+                        </div>
+                        """, unsafe_allow_html=True)
                 
                 with col2:
+                    # Additional info
                     if st.session_state.problem_type == "classification":
                         # Get prediction probability
                         try:
@@ -157,16 +187,52 @@ def _handle_single_prediction(predictor):
                                 st.session_state.trained_model,
                                 input_df
                             )
-                            confidence_color = "🟢" if prob > 0.8 else "🟡" if prob > 0.6 else "🟠"
-                            st.metric(f"{confidence_color} Confidence", f"{prob:.2%}")
+                            confidence_color = "#4CAF50" if prob > 0.8 else "#FF9800" if prob > 0.6 else "#FF5722"
+                            confidence_emoji = "🟢" if prob > 0.8 else "🟡" if prob > 0.6 else "🟠"
+                            
+                            st.markdown(f"""
+                            <div style="
+                                background: linear-gradient(135deg, {confidence_color}, {confidence_color}CC);
+                                color: white;
+                                padding: 20px;
+                                border-radius: 10px;
+                                text-align: center;
+                                margin: 10px 0;
+                            ">
+                                <h2 style="margin: 0;">{confidence_emoji} Confidence</h2>
+                                <h1 style="margin: 10px 0; font-size: 2.5em;">{prob:.1%}</h1>
+                            </div>
+                            """, unsafe_allow_html=True)
                         except Exception as e:
-                            st.info("Confidence not available")
+                            st.info("Confidence score not available")
+                    else:
+                        # For regression, show some statistics
+                        st.markdown(f"""
+                        <div style="
+                            background: linear-gradient(135deg, #9C27B0, #7B1FA2);
+                            color: white;
+                            padding: 20px;
+                            border-radius: 10px;
+                            text-align: center;
+                            margin: 10px 0;
+                        ">
+                            <h2 style="margin: 0;">📊 Model Info</h2>
+                            <p style="margin: 5px 0;">Problem: Regression</p>
+                            <p style="margin: 5px 0;">Features: {len(feature_columns)}</p>
+                        </div>
+                        """, unsafe_allow_html=True)
                 
                 # Show input summary
-                with st.expander("📋 Input Summary"):
-                    input_summary = pd.DataFrame([input_data]).T
-                    input_summary.columns = ['Value']
-                    st.dataframe(input_summary, use_container_width=True)
+                st.markdown("### 📋 Input Summary")
+                input_summary = pd.DataFrame([input_data]).T
+                input_summary.columns = ['Value']
+                
+                # Style the input summary
+                styled_summary = input_summary.style.apply(
+                    lambda x: ['background-color: #f0f0f0; font-weight: bold' if i % 2 == 0 
+                              else 'background-color: white' for i in range(len(x))], axis=0
+                )
+                st.dataframe(styled_summary, use_container_width=True)
             
             except Exception as e:
                 st.error(f"❌ Prediction error: {str(e)}")
@@ -258,11 +324,33 @@ def _handle_batch_prediction(predictor):
                                 logger.warning(f"Could not compute confidence: {e}")
                         
                         st.success("✅ Batch predictions completed!")
-                        st.dataframe(results_df, use_container_width=True)
                         
-                        # Store for potential SHAP analysis
-                        st.session_state.batch_predictions = results_df
-                        st.session_state.batch_aligned_data = aligned_data
+                        # Display results with enhanced styling
+                        st.markdown("### 📊 Prediction Results")
+                        
+                        # Style the results
+                        if st.session_state.problem_type == "classification" and 'Confidence' in results_df.columns:
+                            # Color code confidence scores
+                            def highlight_confidence(val):
+                                if pd.isna(val):
+                                    return ''
+                                if val > 0.8:
+                                    return 'background-color: #d4edda; color: #155724'  # Green
+                                elif val > 0.6:
+                                    return 'background-color: #fff3cd; color: #856404'  # Yellow
+                                else:
+                                    return 'background-color: #f8d7da; color: #721c24'  # Red
+                            
+                            styled_results = results_df.style.applymap(
+                                highlight_confidence, subset=['Confidence']
+                            ).format({'Confidence': '{:.1%}'})
+                            
+                            st.dataframe(styled_results, use_container_width=True)
+                        else:
+                            st.dataframe(results_df, use_container_width=True)
+                        
+                        # Show prediction summary
+                        _show_prediction_summary(predictions)
                         
                         # Download results
                         csv = results_df.to_csv(index=False)
@@ -273,9 +361,6 @@ def _handle_batch_prediction(predictor):
                             mime="text/csv",
                             use_container_width=True
                         )
-                        
-                        # Show prediction summary
-                        _show_prediction_summary(predictions)
                     
                     except Exception as e:
                         st.error(f"❌ Batch prediction error: {str(e)}")
@@ -288,17 +373,38 @@ def _handle_batch_prediction(predictor):
         _show_batch_prediction_template()
 
 def _show_prediction_summary(predictions):
-    """Show prediction summary with visualizations."""
+    """Show prediction summary with enhanced visualizations."""
     st.subheader("📈 Prediction Summary")
     
-    if st.session_state.problem_type == "classification":
-        pred_counts = pd.Series(predictions).value_counts()
-        st.write("**Prediction Distribution:**")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Basic statistics
+        st.markdown("#### 📊 Statistics")
+        total_predictions = len(predictions)
+        st.metric("Total Predictions", f"{total_predictions:,}")
         
-        col1, col2 = st.columns(2)
-        with col1:
-            st.dataframe(pred_counts, use_container_width=True)
-        with col2:
+        if st.session_state.problem_type == "classification":
+            unique_predictions = len(np.unique(predictions))
+            st.metric("Unique Classes", unique_predictions)
+            
+            # Most common prediction
+            pred_counts = pd.Series(predictions).value_counts()
+            most_common = pred_counts.index[0]
+            most_common_count = pred_counts.iloc[0]
+            st.metric("Most Common Class", f"{most_common} ({most_common_count})")
+            
+        else:
+            pred_mean = np.mean(predictions)
+            pred_std = np.std(predictions)
+            st.metric("Mean Prediction", f"{pred_mean:.4f}")
+            st.metric("Std Deviation", f"{pred_std:.4f}")
+    
+    with col2:
+        # Visualization
+        if st.session_state.problem_type == "classification":
+            pred_counts = pd.Series(predictions).value_counts()
+            
             fig = px.pie(
                 values=pred_counts.values, 
                 names=pred_counts.index, 
@@ -306,15 +412,9 @@ def _show_prediction_summary(predictions):
                 color_discrete_sequence=px.colors.qualitative.Set3
             )
             fig.update_traces(textposition='inside', textinfo='percent+label')
+            fig.update_layout(height=400)
             st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.write("**Prediction Statistics:**")
-        pred_stats = pd.Series(predictions).describe()
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.dataframe(pred_stats, use_container_width=True)
-        with col2:
+        else:
             fig = go.Figure()
             fig.add_trace(go.Histogram(
                 x=predictions,
@@ -326,7 +426,8 @@ def _show_prediction_summary(predictions):
             fig.update_layout(
                 title="Prediction Distribution",
                 xaxis_title="Predicted Values",
-                yaxis_title="Frequency"
+                yaxis_title="Frequency",
+                height=400
             )
             st.plotly_chart(fig, use_container_width=True)
 
@@ -346,27 +447,46 @@ def _show_batch_prediction_template():
     st.subheader("📋 Expected File Format")
     st.write("Your file should contain the following columns:")
     
-    format_df = pd.DataFrame({
-        'Column Name': feature_columns,
-        'Data Type': [str(sample_data[col].dtype) for col in feature_columns],
-        'Sample Value': [str(sample_data[col].iloc[0]) if len(sample_data) > 0 else "N/A" for col in feature_columns]
-    })
+    # Enhanced format display
+    format_data = []
+    for col in feature_columns:
+        col_dtype = str(sample_data[col].dtype)
+        sample_val = str(sample_data[col].iloc[0]) if len(sample_data) > 0 else "N/A"
+        unique_count = sample_data[col].nunique()
+        
+        format_data.append({
+            'Column Name': col,
+            'Data Type': col_dtype,
+            'Sample Value': sample_val[:20] + "..." if len(sample_val) > 20 else sample_val,
+            'Unique Values': unique_count
+        })
     
-    st.dataframe(format_df, use_container_width=True)
+    format_df = pd.DataFrame(format_data)
+    
+    # Style the format table
+    styled_format = format_df.style.apply(
+        lambda x: ['background-color: #f8f9fa' if i % 2 == 0 else 'background-color: white' 
+                  for i in range(len(x))], axis=0
+    )
+    st.dataframe(styled_format, use_container_width=True)
     
     # Download template
-    if st.button("📥 Download Template", use_container_width=True):
+    st.markdown("#### 📥 Download Template")
+    if st.button("📄 Download Template", use_container_width=True):
         template_df = pd.DataFrame(columns=feature_columns)
-        # Add one sample row with example data
+        # Add sample rows with example data
         if len(sample_data) > 0:
-            sample_row = {}
-            for col in feature_columns:
-                if pd.api.types.is_numeric_dtype(sample_data[col]):
-                    sample_row[col] = sample_data[col].mean()
-                else:
-                    mode_val = sample_data[col].mode()
-                    sample_row[col] = mode_val[0] if len(mode_val) > 0 else "example"
-            template_df = pd.concat([template_df, pd.DataFrame([sample_row])], ignore_index=True)
+            sample_rows = []
+            for i in range(min(3, len(sample_data))):  # Add 3 sample rows
+                sample_row = {}
+                for col in feature_columns:
+                    if pd.api.types.is_numeric_dtype(sample_data[col]):
+                        sample_row[col] = sample_data[col].iloc[i] if not pd.isna(sample_data[col].iloc[i]) else sample_data[col].mean()
+                    else:
+                        sample_row[col] = sample_data[col].iloc[i] if not pd.isna(sample_data[col].iloc[i]) else "example"
+                sample_rows.append(sample_row)
+            
+            template_df = pd.concat([template_df, pd.DataFrame(sample_rows)], ignore_index=True)
         
         csv_template = template_df.to_csv(index=False)
         st.download_button(
@@ -376,631 +496,3 @@ def _show_batch_prediction_template():
             mime="text/csv",
             use_container_width=True
         )
-
-def _handle_shap_analysis():
-    """Handle SHAP analysis with beautiful visualizations."""
-    st.subheader("🧠 SHAP Analysis - Model Explainability")
-    st.markdown("*Understand how your model makes decisions using SHAP (SHapley Additive exPlanations)*")
-    
-    if not SHAP_AVAILABLE:
-        st.error("❌ SHAP library not available. Install with: `pip install shap`")
-        return
-    
-    # Check if we have data for SHAP analysis
-    trainer = st.session_state.get('fast_trainer')
-    model = st.session_state.trained_model
-    
-    if not trainer or not hasattr(trainer, 'X_test_processed'):
-        st.warning("⚠️ No test data available for SHAP analysis. Please retrain the model.")
-        return
-    
-    # SHAP Analysis Options
-    st.write("**Choose SHAP Analysis Type:**")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        analysis_type = st.selectbox(
-            "Analysis Type",
-            ["Global Analysis", "Single Prediction", "Feature Interaction", "Waterfall Plot"],
-            help="Choose the type of SHAP analysis to perform"
-        )
-    
-    with col2:
-        sample_size = st.slider(
-            "Sample Size for Analysis",
-            min_value=10,
-            max_value=min(500, len(trainer.X_test_processed)),
-            value=min(100, len(trainer.X_test_processed)),
-            help="Number of samples to use for SHAP analysis (more = slower but more accurate)"
-        )
-    
-    if st.button("🔍 Generate SHAP Analysis", type="primary"):
-        with st.spinner("Computing SHAP values... This may take a moment."):
-            try:
-                # Get sample data for SHAP
-                X_sample = trainer.X_test_processed[:sample_size]
-                
-                # Initialize SHAP explainer
-                explainer = _get_shap_explainer(model, trainer.X_train_processed[:100])  # Use small sample for background
-                
-                if explainer is None:
-                    st.error("❌ Could not create SHAP explainer for this model type")
-                    return
-                
-                # Compute SHAP values
-                shap_values = explainer(X_sample)
-                
-                # Display different types of analysis
-                if analysis_type == "Global Analysis":
-                    _display_global_shap_analysis(shap_values, X_sample)
-                elif analysis_type == "Single Prediction":
-                    _display_single_prediction_shap(shap_values, X_sample)
-                elif analysis_type == "Feature Interaction":
-                    _display_feature_interaction_shap(shap_values, X_sample)
-                elif analysis_type == "Waterfall Plot":
-                    _display_waterfall_shap(shap_values, X_sample)
-                
-            except Exception as e:
-                st.error(f"❌ SHAP analysis error: {str(e)}")
-                logger.error(f"SHAP analysis error: {e}")
-                
-                # Show detailed error and suggestions
-                with st.expander("🔧 Troubleshooting"):
-                    st.write("**Possible solutions:**")
-                    st.write("1. Try reducing the sample size")
-                    st.write("2. Some model types may not support all SHAP explainers")
-                    st.write("3. Ensure your model is properly trained")
-                    st.code(str(e))
-
-def _get_shap_explainer(model, X_background):
-    """Get appropriate SHAP explainer for model type."""
-    try:
-        model_name = type(model).__name__.lower()
-        
-        # Try TreeExplainer for tree-based models
-        if any(tree_type in model_name for tree_type in ['forest', 'tree', 'boost', 'lgbm', 'xgb']):
-            try:
-                return shap.TreeExplainer(model)
-            except:
-                pass
-        
-        # Try LinearExplainer for linear models
-        if any(linear_type in model_name for linear_type in ['linear', 'logistic', 'ridge', 'lasso']):
-            try:
-                return shap.LinearExplainer(model, X_background)
-            except:
-                pass
-        
-        # Fallback to Explainer (works with most models but slower)
-        try:
-            return shap.Explainer(model, X_background)
-        except:
-            pass
-        
-        # Last resort: KernelExplainer (slowest but most compatible)
-        try:
-            return shap.KernelExplainer(model.predict, X_background[:50])  # Use even smaller background
-        except:
-            pass
-        
-        return None
-        
-    except Exception as e:
-        logger.error(f"Error creating SHAP explainer: {e}")
-        return None
-
-def _display_global_shap_analysis(shap_values, X_sample):
-    """Display global SHAP analysis."""
-    st.subheader("🌍 Global Feature Importance")
-    
-    try:
-        # Feature importance plot
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write("**📊 Feature Importance (Mean |SHAP|)**")
-            
-            # Calculate mean absolute SHAP values
-            if hasattr(shap_values, 'values'):
-                shap_vals = shap_values.values
-            else:
-                shap_vals = shap_values
-                
-            if len(shap_vals.shape) == 3:  # Multi-class classification
-                shap_vals = np.abs(shap_vals).mean(axis=2)
-            
-            feature_importance = np.abs(shap_vals).mean(axis=0)
-            
-            # Get feature names
-            if hasattr(shap_values, 'feature_names') and shap_values.feature_names is not None:
-                feature_names = shap_values.feature_names
-            else:
-                feature_names = [f'Feature_{i}' for i in range(len(feature_importance))]
-            
-            # Create importance DataFrame
-            importance_df = pd.DataFrame({
-                'Feature': feature_names,
-                'Importance': feature_importance
-            }).sort_values('Importance', ascending=True).tail(15)
-            
-            # Create horizontal bar plot
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=importance_df['Importance'],
-                y=importance_df['Feature'],
-                orientation='h',
-                marker_color='lightblue',
-                text=importance_df['Importance'].round(4),
-                textposition='auto'
-            ))
-            
-            fig.update_layout(
-                title="Top 15 Most Important Features",
-                xaxis_title="Mean |SHAP Value|",
-                yaxis_title="Features",
-                height=500
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            st.write("**🎯 SHAP Summary Statistics**")
-            
-            # Summary statistics
-            summary_stats = {
-                'Total Features': len(feature_importance),
-                'Max Importance': f"{feature_importance.max():.4f}",
-                'Mean Importance': f"{feature_importance.mean():.4f}",
-                'Most Important': feature_names[np.argmax(feature_importance)],
-                'Samples Analyzed': len(X_sample)
-            }
-            
-            for key, value in summary_stats.items():
-                st.metric(key, value)
-            
-            # Feature importance distribution
-            fig_dist = go.Figure()
-            fig_dist.add_trace(go.Histogram(
-                x=feature_importance,
-                nbinsx=20,
-                marker_color='lightgreen',
-                opacity=0.7
-            ))
-            
-            fig_dist.update_layout(
-                title="Feature Importance Distribution",
-                xaxis_title="SHAP Importance",
-                yaxis_title="Count",
-                height=300
-            )
-            
-            st.plotly_chart(fig_dist, use_container_width=True)
-        
-        # Top features detailed analysis
-        st.write("**🔍 Top Features Detailed Analysis**")
-        
-        top_features_df = importance_df.tail(10).sort_values('Importance', ascending=False)
-        
-        # Add feature statistics
-        feature_stats = []
-        for feature in top_features_df['Feature']:
-            if feature in X_sample.columns if hasattr(X_sample, 'columns') else False:
-                idx = list(X_sample.columns).index(feature) if hasattr(X_sample, 'columns') else int(feature.split('_')[1])
-                feature_data = X_sample.iloc[:, idx] if hasattr(X_sample, 'iloc') else X_sample[:, idx]
-                
-                stats = {
-                    'Feature': feature,
-                    'SHAP Importance': f"{top_features_df[top_features_df['Feature'] == feature]['Importance'].iloc[0]:.4f}",
-                    'Mean Value': f"{np.mean(feature_data):.4f}",
-                    'Std Value': f"{np.std(feature_data):.4f}",
-                    'Min Value': f"{np.min(feature_data):.4f}",
-                    'Max Value': f"{np.max(feature_data):.4f}"
-                }
-                feature_stats.append(stats)
-        
-        if feature_stats:
-            feature_stats_df = pd.DataFrame(feature_stats)
-            st.dataframe(feature_stats_df, use_container_width=True)
-        
-    except Exception as e:
-        st.error(f"Error in global SHAP analysis: {str(e)}")
-
-def _display_single_prediction_shap(shap_values, X_sample):
-    """Display SHAP analysis for a single prediction."""
-    st.subheader("🎯 Single Prediction SHAP Analysis")
-    
-    # Select instance to analyze
-    instance_idx = st.slider(
-        "Select instance to analyze",
-        0, len(X_sample) - 1, 0,
-        help="Choose which prediction to analyze in detail"
-    )
-    
-    try:
-        # Get SHAP values for single instance
-        if hasattr(shap_values, 'values'):
-            single_shap = shap_values.values[instance_idx]
-        else:
-            single_shap = shap_values[instance_idx]
-        
-        # Handle multi-class classification
-        if len(single_shap.shape) > 1:
-            class_idx = 0  # Use first class for visualization
-            single_shap = single_shap[:, class_idx]
-            st.info(f"Showing SHAP values for class {class_idx}")
-        
-        # Get feature names
-        if hasattr(shap_values, 'feature_names') and shap_values.feature_names is not None:
-            feature_names = shap_values.feature_names
-        else:
-            feature_names = [f'Feature_{i}' for i in range(len(single_shap))]
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write("**🎯 Feature Contributions**")
-            
-            # Create feature contribution plot
-            contrib_df = pd.DataFrame({
-                'Feature': feature_names,
-                'SHAP_Value': single_shap,
-                'Abs_SHAP': np.abs(single_shap)
-            }).sort_values('Abs_SHAP', ascending=True).tail(15)
-            
-            colors = ['red' if x < 0 else 'green' for x in contrib_df['SHAP_Value']]
-            
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=contrib_df['SHAP_Value'],
-                y=contrib_df['Feature'],
-                orientation='h',
-                marker_color=colors,
-                text=contrib_df['SHAP_Value'].round(4),
-                textposition='auto'
-            ))
-            
-            fig.update_layout(
-                title=f"SHAP Values for Instance {instance_idx}",
-                xaxis_title="SHAP Value",
-                yaxis_title="Features",
-                height=500
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            st.write("**📊 Instance Details**")
-            
-            # Show feature values for this instance
-            if hasattr(X_sample, 'iloc'):
-                instance_values = X_sample.iloc[instance_idx]
-            else:
-                instance_values = X_sample[instance_idx]
-            
-            instance_df = pd.DataFrame({
-                'Feature': feature_names,
-                'Value': instance_values,
-                'SHAP_Value': single_shap,
-                'Impact': ['↑ Positive' if x > 0 else '↓ Negative' if x < 0 else '→ Neutral' for x in single_shap]
-            })
-            
-            # Sort by absolute SHAP value
-            instance_df['Abs_SHAP'] = np.abs(instance_df['SHAP_Value'])
-            instance_df = instance_df.sort_values('Abs_SHAP', ascending=False).head(15)
-            instance_df = instance_df.drop('Abs_SHAP', axis=1)
-            
-            st.dataframe(instance_df, use_container_width=True)
-            
-            # Summary metrics
-            positive_impact = single_shap[single_shap > 0].sum()
-            negative_impact = single_shap[single_shap < 0].sum()
-            net_impact = positive_impact + negative_impact
-            
-            st.write("**Impact Summary:**")
-            st.metric("Positive Impact", f"{positive_impact:.4f}")
-            st.metric("Negative Impact", f"{negative_impact:.4f}")
-            st.metric("Net Impact", f"{net_impact:.4f}")
-            
-    except Exception as e:
-        st.error(f"Error in single prediction SHAP analysis: {str(e)}")
-
-def _display_feature_interaction_shap(shap_values, X_sample):
-    """Display SHAP feature interaction analysis."""
-    st.subheader("🔗 Feature Interaction Analysis")
-    
-    try:
-        # Get top features for interaction analysis
-        if hasattr(shap_values, 'values'):
-            shap_vals = shap_values.values
-        else:
-            shap_vals = shap_values
-            
-        if len(shap_vals.shape) == 3:  # Multi-class
-            shap_vals = np.abs(shap_vals).mean(axis=2)
-        
-        feature_importance = np.abs(shap_vals).mean(axis=0)
-        
-        # Get feature names
-        if hasattr(shap_values, 'feature_names') and shap_values.feature_names is not None:
-            feature_names = shap_values.feature_names
-        else:
-            feature_names = [f'Feature_{i}' for i in range(len(feature_importance))]
-        
-        # Select top features for interaction
-        top_indices = np.argsort(feature_importance)[-10:]  # Top 10 features
-        top_features = [feature_names[i] for i in top_indices]
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            feature1 = st.selectbox("Select First Feature", top_features, key="feat1")
-            feature2 = st.selectbox("Select Second Feature", top_features, key="feat2")
-        
-        with col2:
-            if feature1 != feature2:
-                # Get indices
-                feat1_idx = feature_names.index(feature1)
-                feat2_idx = feature_names.index(feature2)
-                
-                # Get feature values
-                if hasattr(X_sample, 'iloc'):
-                    feat1_values = X_sample.iloc[:, feat1_idx]
-                    feat2_values = X_sample.iloc[:, feat2_idx]
-                else:
-                    feat1_values = X_sample[:, feat1_idx]
-                    feat2_values = X_sample[:, feat2_idx]
-                
-                # Get SHAP values for these features
-                shap1_values = shap_vals[:, feat1_idx]
-                shap2_values = shap_vals[:, feat2_idx]
-                
-                # Create interaction plot
-                fig = go.Figure()
-                
-                # Color by SHAP value
-                fig.add_trace(go.Scatter(
-                    x=feat1_values,
-                    y=feat2_values,
-                    mode='markers',
-                    marker=dict(
-                        size=8,
-                        color=shap1_values + shap2_values,
-                        colorscale='RdYlBu',
-                        showscale=True,
-                        colorbar=dict(title="Combined SHAP")
-                    ),
-                    text=[f"SHAP1: {s1:.3f}<br>SHAP2: {s2:.3f}" for s1, s2 in zip(shap1_values, shap2_values)],
-                    hovertemplate=f"{feature1}: %{{x}}<br>{feature2}: %{{y}}<br>%{{text}}<extra></extra>"
-                ))
-                
-                fig.update_layout(
-                    title=f"Feature Interaction: {feature1} vs {feature2}",
-                    xaxis_title=feature1,
-                    yaxis_title=feature2,
-                    height=400
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
-        
-        # Feature correlation with SHAP values
-        st.write("**🔍 Feature-SHAP Correlations**")
-        
-        correlations = []
-        for i, feat_name in enumerate(feature_names[:10]):  # Top 10 features
-            if hasattr(X_sample, 'iloc'):
-                feat_values = X_sample.iloc[:, i]
-            else:
-                feat_values = X_sample[:, i]
-            
-            shap_feat_values = shap_vals[:, i]
-            correlation = np.corrcoef(feat_values, shap_feat_values)[0, 1]
-            
-            correlations.append({
-                'Feature': feat_name,
-                'Feature-SHAP Correlation': correlation,
-                'Mean SHAP': np.mean(np.abs(shap_feat_values))
-            })
-        
-        corr_df = pd.DataFrame(correlations).sort_values('Mean SHAP', ascending=False)
-        st.dataframe(corr_df, use_container_width=True)
-        
-    except Exception as e:
-        st.error(f"Error in feature interaction analysis: {str(e)}")
-
-def _display_waterfall_shap(shap_values, X_sample):
-    """Display SHAP waterfall plot."""
-    st.subheader("🌊 SHAP Waterfall Analysis")
-    
-    # Select instance for waterfall
-    instance_idx = st.slider(
-        "Select instance for waterfall plot",
-        0, len(X_sample) - 1, 0,
-        help="Choose which prediction to show as waterfall",
-        key="waterfall_instance"
-    )
-    
-    try:
-        # Get SHAP values for single instance
-        if hasattr(shap_values, 'values'):
-            single_shap = shap_values.values[instance_idx]
-            base_value = shap_values.base_values[instance_idx] if hasattr(shap_values, 'base_values') else 0
-        else:
-            single_shap = shap_values[instance_idx]
-            base_value = 0
-        
-        # Handle multi-class classification
-        if len(single_shap.shape) > 1:
-            class_idx = st.selectbox("Select class", range(single_shap.shape[1]), key="waterfall_class")
-            single_shap = single_shap[:, class_idx]
-            if hasattr(base_value, '__len__') and len(base_value) > 1:
-                base_value = base_value[class_idx]
-        
-        # Get feature names
-        if hasattr(shap_values, 'feature_names') and shap_values.feature_names is not None:
-            feature_names = shap_values.feature_names
-        else:
-            feature_names = [f'Feature_{i}' for i in range(len(single_shap))]
-        
-        # Create waterfall data
-        waterfall_data = []
-        
-        # Base value
-        waterfall_data.append({
-            'Feature': 'Base Value',
-            'SHAP_Value': base_value,
-            'Cumulative': base_value,
-            'Type': 'Base'
-        })
-        
-        # Sort features by absolute SHAP value
-        sorted_indices = np.argsort(np.abs(single_shap))[::-1][:15]  # Top 15 features
-        
-        cumulative = base_value
-        for idx in sorted_indices:
-            cumulative += single_shap[idx]
-            waterfall_data.append({
-                'Feature': feature_names[idx],
-                'SHAP_Value': single_shap[idx],
-                'Cumulative': cumulative,
-                'Type': 'Positive' if single_shap[idx] > 0 else 'Negative'
-            })
-        
-        # Final prediction
-        final_prediction = cumulative
-        waterfall_data.append({
-            'Feature': 'Final Prediction',
-            'SHAP_Value': 0,
-            'Cumulative': final_prediction,
-            'Type': 'Final'
-        })
-        
-        waterfall_df = pd.DataFrame(waterfall_data)
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            # Create waterfall visualization
-            fig = go.Figure()
-            
-            # Add bars for each contribution
-            colors = []
-            for _, row in waterfall_df.iterrows():
-                if row['Type'] == 'Base':
-                    colors.append('blue')
-                elif row['Type'] == 'Positive':
-                    colors.append('green')
-                elif row['Type'] == 'Negative':
-                    colors.append('red')
-                else:
-                    colors.append('orange')
-            
-            fig.add_trace(go.Bar(
-                x=range(len(waterfall_df)),
-                y=waterfall_df['Cumulative'],
-                marker_color=colors,
-                text=[f"{val:.3f}" for val in waterfall_df['Cumulative']],
-                textposition='auto',
-                hovertemplate="<b>%{customdata}</b><br>Value: %{y:.4f}<br>Contribution: %{text}<extra></extra>",
-                customdata=waterfall_df['Feature']
-            ))
-            
-            # Add connection lines
-            for i in range(len(waterfall_df) - 1):
-                fig.add_shape(
-                    type="line",
-                    x0=i + 0.4, y0=waterfall_df.iloc[i]['Cumulative'],
-                    x1=i + 0.6, y1=waterfall_df.iloc[i]['Cumulative'],
-                    line=dict(color="gray", width=1, dash="dash")
-                )
-            
-            fig.update_layout(
-                title=f"SHAP Waterfall Plot - Instance {instance_idx}",
-                xaxis_title="Features",
-                yaxis_title="Prediction Value",
-                xaxis=dict(
-                    tickmode='array',
-                    tickvals=list(range(len(waterfall_df))),
-                    ticktext=[feat[:15] + '...' if len(feat) > 15 else feat for feat in waterfall_df['Feature']],
-                    tickangle=45
-                ),
-                height=500
-            )
-            
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            st.write("**📊 Waterfall Details**")
-            
-            # Show the waterfall breakdown
-            display_df = waterfall_df.copy()
-            display_df['SHAP_Value'] = display_df['SHAP_Value'].round(4)
-            display_df['Cumulative'] = display_df['Cumulative'].round(4)
-            
-            st.dataframe(display_df[['Feature', 'SHAP_Value', 'Cumulative']], use_container_width=True)
-            
-            # Summary
-            st.write("**Summary:**")
-            st.metric("Base Value", f"{base_value:.4f}")
-            st.metric("Final Prediction", f"{final_prediction:.4f}")
-            st.metric("Total Change", f"{final_prediction - base_value:.4f}")
-            
-            # Top contributors
-            contrib_df = waterfall_df[waterfall_df['Type'].isin(['Positive', 'Negative'])].copy()
-            contrib_df['Abs_SHAP'] = np.abs(contrib_df['SHAP_Value'])
-            top_contrib = contrib_df.nlargest(3, 'Abs_SHAP')
-            
-            st.write("**🏆 Top Contributors:**")
-            for _, row in top_contrib.iterrows():
-                direction = "↑" if row['SHAP_Value'] > 0 else "↓"
-                st.write(f"{direction} **{row['Feature']}**: {row['SHAP_Value']:.4f}")
-        
-    except Exception as e:
-        st.error(f"Error in waterfall analysis: {str(e)}")
-
-# Additional SHAP utilities
-def _create_shap_summary_plot(shap_values, X_sample):
-    """Create a summary plot showing SHAP value distributions."""
-    try:
-        # This would typically use shap.summary_plot, but we'll create a custom version
-        # Get feature importance
-        if hasattr(shap_values, 'values'):
-            shap_vals = shap_values.values
-        else:
-            shap_vals = shap_values
-            
-        if len(shap_vals.shape) == 3:  # Multi-class
-            shap_vals = np.abs(shap_vals).mean(axis=2)
-        
-        feature_importance = np.abs(shap_vals).mean(axis=0)
-        
-        # Get feature names
-        if hasattr(shap_values, 'feature_names') and shap_values.feature_names is not None:
-            feature_names = shap_values.feature_names
-        else:
-            feature_names = [f'Feature_{i}' for i in range(len(feature_importance))]
-        
-        # Create violin plot for top features
-        top_indices = np.argsort(feature_importance)[-10:]
-        
-        fig = go.Figure()
-        
-        for i, idx in enumerate(top_indices):
-            fig.add_trace(go.Violin(
-                y=shap_vals[:, idx],
-                name=feature_names[idx],
-                box_visible=True,
-                meanline_visible=True
-            ))
-        
-        fig.update_layout(
-            title="SHAP Values Distribution for Top Features",
-            yaxis_title="SHAP Value",
-            height=600
-        )
-        
-        return fig
-        
-    except Exception as e:
-        logger.error(f"Error creating SHAP summary plot: {e}")
-        return None
