@@ -1,0 +1,42 @@
+# Create k8s/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: streamlit-config
+  namespace: ml-app
+data:
+  config.toml: |
+    [global]
+    developmentMode = false
+    showWarningOnDirectExecution = false
+
+    [server]
+    port = 8501
+    baseUrlPath = ""
+    enableCORS = false
+    enableXsrfProtection = true
+    maxUploadSize = 500
+    maxMessageSize = 500
+    headless = true
+    address = "0.0.0.0"
+
+    [browser]
+    gatherUsageStats = false
+
+    [theme]
+    primaryColor = "#FF6B6B"
+    backgroundColor = "#FFFFFF"
+    secondaryBackgroundColor = "#F0F2F6"
+    textColor = "#262730"
+    font = "sans serif"
+
+    [client]
+    caching = true
+    showErrorDetails = false
+
+    [runner]
+    magicEnabled = true
+    installTracer = false
+    fixMatplotlib = true
+    postScriptGC = true
+    fastReruns = true
