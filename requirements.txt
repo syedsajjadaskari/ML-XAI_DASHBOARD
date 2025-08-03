@@ -41,3 +41,11 @@ psutil==5.9.6
 pytest==7.4.2
 black==23.9.1
 flake8==6.1.0
+
+#cloud Depoloyment - UNCHANGED
+google-cloud-storage==2.10.0
+google-auth==2.23.0
+
+#production
+# Production
+gunicorn==21.2.0
