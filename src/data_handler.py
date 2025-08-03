@@ -1,6 +1,6 @@
 """
-Data Handler Module
-Handles data loading, preprocessing, and validation (No PyCaret dependency)
+Data Handler Module - FIXED VERSION
+Handles data loading, preprocessing, and validation with GCS integration
 """
 
 import pandas as pd
@@ -11,10 +11,18 @@ import logging
 from pathlib import Path
 import io
 
+# Only import storage handler if we're using GCS
+try:
+    from .storage_handler import TemporaryStorageHandler, get_session_id
+    STORAGE_AVAILABLE = True
+except ImportError:
+    STORAGE_AVAILABLE = False
+    st.warning("⚠️ Storage handler not available. Large files will use memory processing.")
+
 logger = logging.getLogger(__name__)
 
 class DataHandler:
-    """Handles all data operations without PyCaret dependency."""
+    """Handles all data operations with optional GCS temporary storage."""
     
     def __init__(self, config: Dict[str, Any]):
         # Handle None config gracefully
@@ -27,19 +35,102 @@ class DataHandler:
         app_config = config.get('app', {})
         self.max_file_size = app_config.get('max_file_size', 200) * 1024 * 1024  # Convert to bytes
         self.supported_formats = app_config.get('supported_formats', ['csv', 'xlsx', 'parquet'])
+        
+        # Initialize temporary storage if available
+        self.temp_storage = None
+        if STORAGE_AVAILABLE:
+            try:
+                import os
+                bucket_name = os.getenv('GCS_TEMP_BUCKET')
+                if bucket_name:
+                    self.temp_storage = TemporaryStorageHandler(bucket_name)
+                    logger.info("✅ Temporary storage initialized")
+                else:
+                    logger.warning("⚠️ GCS_TEMP_BUCKET not set, using memory processing")
+            except Exception as e:
+                logger.warning(f"⚠️ Could not initialize temporary storage: {e}")
     
     def load_data(self, uploaded_file) -> pd.DataFrame:
-        """Load data from uploaded file."""
+        """Load data with automatic storage selection based on file size."""
         try:
             # Check file size
             if uploaded_file.size > self.max_file_size:
                 raise ValueError(f"File size ({uploaded_file.size / 1024 / 1024:.1f}MB) exceeds limit ({self.max_file_size / 1024 / 1024:.0f}MB)")
             
+            file_size_mb = uploaded_file.size / (1024 * 1024)
+            
+            # Decision: Use GCS for files > 50MB if available
+            use_temp_storage = (file_size_mb > 1 and 
+                              self.temp_storage is not None and 
+                              STORAGE_AVAILABLE)
+            
+            if use_temp_storage:
+                st.info(f"📤 Large file detected ({file_size_mb:.1f}MB). Using temporary storage...")
+                data = self._load_via_temp_storage(uploaded_file)
+                st.session_state.data_source = 'gcs'
+            else:
+                st.info(f"📁 Processing file in memory ({file_size_mb:.1f}MB)...")
+                data = self._load_file_directly(uploaded_file)
+                st.session_state.data_source = 'memory'
+            
+            # Store metadata
+            st.session_state.data_size_mb = file_size_mb
+            
+            # Basic validation
+            if data.empty:
+                raise ValueError("File is empty")
+            
+            if len(data.columns) < 2:
+                raise ValueError("Dataset must have at least 2 columns")
+            
+            # Clean column names
+            data.columns = self._clean_column_names(data.columns)
+            
+            logger.info(f"Data loaded successfully: {data.shape}")
+            return data
+            
+        except Exception as e:
+            logger.error(f"Error loading data: {e}")
+            raise
+    
+    def _load_via_temp_storage(self, uploaded_file) -> pd.DataFrame:
+        """Load file via temporary storage (GCS)."""
+        try:
+            if not STORAGE_AVAILABLE or not self.temp_storage:
+                raise ValueError("Temporary storage not available")
+            
+            # Upload to GCS
+            session_id = get_session_id()
+            with st.spinner("📤 Uploading to temporary storage..."):
+                gcs_path = self.temp_storage.upload_file(uploaded_file, session_id)
+            
+            # Store GCS path in session state
+            st.session_state.data_gcs_path = gcs_path
+            
+            # Download and process
+            with st.spinner("📥 Processing file from temporary storage..."):
+                data = self.temp_storage.download_file(gcs_path)
+            
+            st.success("✅ File processed from temporary storage!")
+            return data
+            
+        except Exception as e:
+            logger.error(f"Error loading via temporary storage: {e}")
+            # Fallback to direct loading
+            st.warning("⚠️ Temporary storage failed, falling back to memory processing...")
+            return self._load_file_directly(uploaded_file)
+    
+    def _load_file_directly(self, uploaded_file) -> pd.DataFrame:
+        """Load file directly into memory."""
+        try:
             # Get file extension
             file_extension = uploaded_file.name.split('.')[-1].lower()
             
             if file_extension not in self.supported_formats:
                 raise ValueError(f"Unsupported file format: {file_extension}")
+            
+            # Reset file pointer
+            uploaded_file.seek(0)
             
             # Load based on file type
             if file_extension == 'csv':
@@ -59,25 +150,14 @@ class DataHandler:
             else:
                 raise ValueError(f"Unsupported file format: {file_extension}")
             
-            # Basic validation
-            if data.empty:
-                raise ValueError("File is empty")
-            
-            if len(data.columns) < 2:
-                raise ValueError("Dataset must have at least 2 columns")
-            
-            # Clean column names
-            data.columns = self._clean_column_names(data.columns)
-            
-            logger.info(f"Data loaded successfully: {data.shape}")
             return data
             
         except Exception as e:
-            logger.error(f"Error loading data: {e}")
+            logger.error(f"Error loading file directly: {e}")
             raise
     
     def load_sample_data(self, dataset_name: str) -> pd.DataFrame:
-        """Load sample datasets without PyCaret."""
+        """Load sample datasets."""
         try:
             # Create synthetic data instead of using PyCaret
             data = self._create_synthetic_data(dataset_name)
@@ -373,3 +453,22 @@ class DataHandler:
             validation_results['errors'].append(f"Validation error: {str(e)}")
             validation_results['is_valid'] = False
             return validation_results
+    
+    def cleanup_temp_storage(self):
+        """Clean up temporary storage for current session."""
+        try:
+            if (STORAGE_AVAILABLE and 
+                self.temp_storage and 
+                hasattr(st.session_state, 'data_gcs_path')):
+                
+                session_id = get_session_id()
+                self.temp_storage.cleanup_user_session(session_id)
+                
+                # Clear session state
+                if 'data_gcs_path' in st.session_state:
+                    del st.session_state['data_gcs_path']
+                
+                logger.info("✅ Temporary storage cleaned up")
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Error cleaning up temporary storage: {e}")
