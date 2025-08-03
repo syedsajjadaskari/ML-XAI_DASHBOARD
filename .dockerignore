@@ -1,0 +1,26 @@
+# Create .dockerignore
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.log
+.git/
+.gitignore
+README.md
+Dockerfile
+.dockerignore
+.pytest_cache/
+.coverage
+.venv/
+venv/
+.env
+*.tmp
+*.temp
+models/*.pkl
+models/*.joblib
+data/uploads/
+logs/*.log
+node_modules/
+.DS_Store
+Thumbs.db
