@@ -1,0 +1,89 @@
+# Create k8s/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-app
+  namespace: ml-app
+  labels:
+    app: ml-app
+    version: v1.0.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ml-app
+  template:
+    metadata:
+      labels:
+        app: ml-app
+        version: v1.0.0
+    spec:
+      containers:
+      - name: ml-app
+        image: gcr.io/ml-xai-dashboard-467905/ml-app:v1.0.0  # Replace with your project ID
+        ports:
+        - containerPort: 8501
+          name: http
+        env:
+        - name: GCS_TEMP_BUCKET
+          value: "gs://ml-xai-dashboard-467905-ml-temp-storage/"  # Replace with your bucket
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: "/etc/gcs/key.json"
+        - name: STREAMLIT_SERVER_HEADLESS
+          value: "true"
+        - name: STREAMLIT_SERVER_PORT
+          value: "8501"
+        - name: STREAMLIT_SERVER_ADDRESS
+          value: "0.0.0.0"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "1000m"
+        volumeMounts:
+        - name: streamlit-config
+          mountPath: /app/.streamlit
+          readOnly: true
+        - name: gcs-credentials
+          mountPath: /etc/gcs
+          readOnly: true
+        livenessProbe:
+          httpGet:
+            path: /_stcore/health
+            port: 8501
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /_stcore/health
+            port: 8501
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+      volumes:
+      - name: streamlit-config
+        configMap:
+          name: streamlit-config
+      - name: gcs-credentials
+        secret:
+          secretName: gcs-credentials
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-app-service
+  namespace: ml-app
+  labels:
+    app: ml-app
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8501
+    protocol: TCP
+    name: http
+  selector:
+    app: ml-app
