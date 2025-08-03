@@ -1,0 +1,44 @@
+# k8s/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ml-app-ingress
+  namespace: ml-app
+  annotations:
+    # Use GCE Ingress (Google Cloud Load Balancer)
+    kubernetes.io/ingress.global-static-ip-name: "ml-app-ip"
+
+    # Optional: Enable managed TLS with Google-managed SSL certificate
+    # kubernetes.io/ingress.allow-http: "true"  # Set to "false" to disable HTTP after HTTPS is ready
+
+    # If using Google-managed SSL (recommended for GCE)
+    # networking.gke.io/managed-certificates: "ml-app-https-cert"
+    
+    # Only if using cert-manager with GCE (advanced): use IngressClass and cert-manager
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  labels:
+    app: ml-app
+spec:
+  # Use the correct ingress class name
+  ingressClassName: gce
+
+  # TLS configuration
+  tls:
+    - hosts:
+        - ml-app.yourdomain.com
+      # Option 1: Use Google-managed certificate (recommended for GCE)
+      secretName: ""  # Leave empty if using managed certificate
+      # Option 2: Use your own cert via Secret (if not using managed cert)
+      # secretName: ml-app-tls  # Must exist in 'ml-app' namespace
+
+  rules:
+    - host: ml-app.yourdomain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ml-app-service
+                port:
+                  number: 80
