@@ -43,22 +43,58 @@ def page_data_upload(data_handler):
     )
     
     if uploaded_file is not None:
-        try:
-            # Load data
-            with st.spinner("Loading data..."):
+        file_size_mb = uploaded_file.size / (1024 * 1024)
+        
+        # Show file info
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("File Size", f"{file_size_mb:.1f} MB")
+        with col2:
+            storage_method = "Temporary Storage (GCS)" if file_size_mb > 50 else "Memory"
+            st.metric("Storage Method", storage_method)
+        with col3:
+            estimated_time = "2-5 minutes" if file_size_mb > 50 else "< 1 minute"
+            st.metric("Est. Processing Time", estimated_time)
+        
+        # Warning for large files
+        if file_size_mb > 100:
+            st.warning(f"⚠️ Large file detected ({file_size_mb:.1f}MB). Processing may take 3-5 minutes.")
+        
+        # Progress tracking
+        if st.button("🚀 Process File", type="primary"):
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            try:
+                # Upload phase
+                if file_size_mb > 50:
+                    status_text.text("📤 Uploading to temporary storage...")
+                    progress_bar.progress(25)
+                
+                # Processing phase
+                status_text.text("🔄 Processing data...")
+                progress_bar.progress(50)
+                
                 data = data_handler.load_data(uploaded_file)
+                progress_bar.progress(75)
+                
+                # Validation phase
+                status_text.text("✅ Validating data...")
                 st.session_state.data = data
-                # Clear related session state when new data is loaded
-                st.session_state.target_column = None
-                st.session_state.problem_type = None
-            
-            st.success(f"✅ Data loaded successfully!")
-            _show_data_info_and_preview(data)
-            
-        except Exception as e:
-            st.error(f"❌ Error loading data: {str(e)}")
-            logger.error(f"Data loading error: {e}")
-            return
+                progress_bar.progress(100)
+                
+                status_text.text("🎉 File processed successfully!")
+                
+                # Show storage info
+                if file_size_mb > 50:
+                    st.info(f"📊 File stored in temporary storage. Will be automatically cleaned up in 7 days.")
+                
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"❌ Error processing file: {str(e)}")
+                progress_bar.empty()
+                status_text.empty()
     
     # Sample data section
     elif st.session_state.data is None:  # Only show if no data loaded
