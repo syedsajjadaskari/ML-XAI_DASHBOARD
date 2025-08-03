@@ -1,34 +1,7 @@
-[global]
-developmentMode = false
-showWarningOnDirectExecution = false
-
 [server]
-port = 8501
-baseUrlPath = ""
-enableCORS = false
-enableXsrfProtection = true
-maxUploadSize = 200
-maxMessageSize = 200
+maxUploadSize = 1024
+maxMessageSize = 500
+
 
 [browser]
-serverAddress = "localhost"
 gatherUsageStats = false
-serverPort = 8501
-
-[theme]
-primaryColor = "#FF6B6B"
-backgroundColor = "#FFFFFF"
-secondaryBackgroundColor = "#F0F2F6"
-textColor = "#262730"
-font = "sans serif"
-
-[client]
-caching = true
-showErrorDetails = false
-
-[runner]
-magicEnabled = true
-installTracer = false
-fixMatplotlib = true
-postScriptGC = true
-fastReruns = true
